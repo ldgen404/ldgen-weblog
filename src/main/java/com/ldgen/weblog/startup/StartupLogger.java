@@ -35,14 +35,17 @@ public class StartupLogger implements ApplicationListener<ApplicationReadyEvent>
 
             log.info("""
                             
-                            ----------------------------------------------------------
-                            Application '{}' 启动成功!
-                            环境:      {}
-                            耗时:      {} s
-                            Local:    {}://localhost:{}
-                            External: {}://{}:{}
-                            项目接口地址：{}
-                            ----------------------------------------------------------
+                            🔥 项目已就绪！
+                             * <p>
+                             * 📌 环境信息
+                             * • 应用：{}
+                             * • 环境：{}
+                             * • 耗时：{} s
+                             * <p>
+                             * 🌐 访问入口
+                             * • Local    → {}://localhost:{}
+                             * • External → {}://{}:{}
+                             * • Doc      → {}
                             """,
                     env.getProperty("spring.application.name", "aicodmaster"),
                     String.join(",", env.getActiveProfiles()),
@@ -73,4 +76,18 @@ public class StartupLogger implements ApplicationListener<ApplicationReadyEvent>
  * • Local    → {}://localhost:{}
  * • External → {}://{}:{}
  * • Doc      → {}
+ */
+
+/**
+ *
+ *
+ *  ----------------------------------------------------------
+ *                             Application '{}' 启动成功!
+ *                             环境:      {}
+ *                             耗时:      {} s
+ *                             Local:    {}://localhost:{}
+ *                             External: {}://{}:{}
+ *                             项目接口地址：{}
+ *                             ----------------------------------------------------------
+ *
  */

@@ -9,6 +9,7 @@ import com.ldgen.weblog.model.dto.tag.AddTagRequest;
 import com.ldgen.weblog.model.dto.tag.TagQueryRequest;
 import com.ldgen.weblog.model.entity.TCategory;
 import com.ldgen.weblog.model.vo.SelectRspVO;
+import com.ldgen.weblog.model.vo.tag.FindTagListRspVO;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.ldgen.weblog.model.entity.Tag;
@@ -22,6 +23,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -117,5 +119,32 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
                     ).collect(Collectors.toList());
         }
         return ResultUtils.success(selectRspVOS);
+    }
+
+    /**
+     * 获取前台标签列表
+     *
+     * @return 标签列表
+     */
+    @Override
+    public BaseResponse<List<FindTagListRspVO>> findTagList() {
+        List<Tag> tagList = tagMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .eq("is_deleted", 0)
+                        .orderBy("create_time", false)
+        );
+
+        if (CollectionUtils.isEmpty(tagList)) {
+            return ResultUtils.success(Collections.emptyList());
+        }
+
+        List<FindTagListRspVO> rspList = tagList.stream()
+                .map(tag -> FindTagListRspVO.builder()
+                        .id(tag.getId())
+                        .name(tag.getTagName())
+                        .build())
+                .collect(Collectors.toList());
+
+        return ResultUtils.success(rspList);
     }
 }

@@ -52,7 +52,7 @@
 import { User, Lock } from '@element-plus/icons-vue'
 import { login } from '@/api/admin/user'
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { showMessage} from '@/composables/util'
 import { setToken } from '@/composables/cookie'
 import { useUserStore } from '@/stores/user'
@@ -66,6 +66,7 @@ const form = reactive({
 })
 
 const router = useRouter()
+const route = useRoute()
 // 登录按钮加载
 const loading = ref(false)
 
@@ -112,11 +113,14 @@ const onSubmit = () => {
                 let token = res.data.token
                 setToken(token)
 
+                // 先把登录返回的用户信息写入全局状态，避免页面初次显示为空
+                userStore.setUserInfoData(res.data.user || {})
+
                 // 获取用户信息，并存储到全局状态中
                 userStore.setUserInfo()
 
-                // 跳转到后台首页
-                router.push('/admin/index')
+                const redirect = route.query && route.query.redirect ? route.query.redirect : '/admin/index'
+                router.push(redirect)
             } else {
                 // 获取服务端返回的错误消息
                 let message = res.message

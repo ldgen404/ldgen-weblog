@@ -17,12 +17,18 @@ router.beforeEach((to, from, next) => {
         // 若用户想访问后台（以 /admin 为前缀的路由）
         // 未登录，则强制跳转登录页
         showMessage('请先登录', 'warning')
-        next({ path: '/login' })
+        next({
+            path: '/login',
+            query: {
+                redirect: to.fullPath
+            }
+        })
     } else if (token && to.path == '/login') {
         // 若用户已经登录，且重复访问登录页
         showMessage('请勿重复登录', 'warning')
-        // 跳转后台首页
-        next({ path: '/admin/index' })
+        next({
+            path: (to.query && to.query.redirect) ? to.query.redirect : '/admin/index'
+        })
     } else {
         next()
     }

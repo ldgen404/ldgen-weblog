@@ -33,7 +33,7 @@ public class Tag implements Serializable {
      * 标签id
      */
     @Id(keyType = KeyType.Auto)
-    private BigInteger id;
+    private Long id;
 
     /**
      * 标签名称

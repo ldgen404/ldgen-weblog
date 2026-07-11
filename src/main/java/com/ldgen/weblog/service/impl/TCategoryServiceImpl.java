@@ -10,6 +10,7 @@ import com.ldgen.weblog.model.dto.category.CategoryQueryRequest;
 import com.ldgen.weblog.model.dto.category.FindCategoryPageListRequest;
 import com.ldgen.weblog.model.vo.FindCategoryPageListRspVO;
 import com.ldgen.weblog.model.vo.SelectRspVO;
+import com.ldgen.weblog.model.vo.category.FindCategoryListRspVO;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -24,6 +25,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -112,6 +114,33 @@ public class TCategoryServiceImpl extends ServiceImpl<TCategoryMapper, TCategory
                     ).collect(Collectors.toList());
         }
         return ResultUtils.success(selectRspVOS);
+    }
+
+    /**
+     * 获取前台分类列表
+     *
+     * @return 分类列表
+     */
+    @Override
+    public BaseResponse<List<FindCategoryListRspVO>> findCategoryList() {
+        List<TCategory> categoryList = tCategoryMapper.selectListByQuery(
+                QueryWrapper.create()
+                        .eq("is_deleted", 0)
+                        .orderBy("create_time", false)
+        );
+
+        if (CollectionUtils.isEmpty(categoryList)) {
+            return ResultUtils.success(Collections.emptyList());
+        }
+
+        List<FindCategoryListRspVO> rspList = categoryList.stream()
+                .map(category -> FindCategoryListRspVO.builder()
+                        .id(category.getId())
+                        .name(category.getCategoryName())
+                        .build())
+                .collect(Collectors.toList());
+
+        return ResultUtils.success(rspList);
     }
 
 

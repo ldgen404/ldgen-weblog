@@ -1,4 +1,7 @@
 import Index from '@/pages/frontend/index.vue'
+import FrontCategory from '@/pages/frontend/category.vue'
+import FrontTag from '@/pages/frontend/tag.vue'
+import FrontArchive from '@/pages/frontend/archive.vue'
 import Login from '@/pages/admin/login.vue'
 import AdminIndex from '@/pages/admin/index.vue'
 import AdminArticleList from '@/pages/admin/article-list.vue'
@@ -18,6 +21,27 @@ const routes = [
         }
     },
     {
+        path: '/category',
+        component: FrontCategory,
+        meta: {
+            title: '分类'
+        }
+    },
+    {
+        path: '/tag',
+        component: FrontTag,
+        meta: {
+            title: '标签'
+        }
+    },
+    {
+        path: '/archive',
+        component: FrontArchive,
+        meta: {
+            title: '归档'
+        }
+    },
+    {
         path: '/login', // 登录页
         component: Login,
         meta: {
@@ -27,6 +51,7 @@ const routes = [
     {
         path: "/admin", // 后台首页
         component: Admin,
+        redirect: "/admin/index",
         // 使用到 admin.vue 布局的，都需要放置在其子路由下面
         children: [
             {

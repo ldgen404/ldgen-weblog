@@ -1,5 +1,6 @@
 import axios from "axios";
-import { getToken } from "@/composables/cookie"
+import router from "@/router";
+import { getToken, removeToken } from "@/composables/cookie"
 import { showMessage} from '@/composables/util'
 
 // 创建 Axios 实例
@@ -35,9 +36,27 @@ instance.interceptors.response.use(function (response) {
     // 超出 2xx 范围的状态码都会触发该函数。
     // 对响应错误做点什么
 
-    // 若后台有错误提示就用提示文字，默认提示为 '请求失败'
-    let errorMsg = error.response.data.message || '请求失败'
-    // 弹错误提示
+    const status = error?.response?.status
+
+    if (status === 401) {
+        removeToken()
+        showMessage('请先登录', 'warning')
+
+        const currentPath = router.currentRoute?.value?.fullPath || '/admin/index'
+        const currentRoutePath = router.currentRoute?.value?.path || ''
+        if (currentRoutePath !== '/login') {
+            router.push({
+                path: '/login',
+                query: {
+                    redirect: currentPath
+                }
+            }).catch(() => {})
+        }
+
+        return Promise.reject(error)
+    }
+
+    const errorMsg = error?.response?.data?.message || error?.message || '请求失败'
     showMessage(errorMsg, 'error')
 
     return Promise.reject(error)

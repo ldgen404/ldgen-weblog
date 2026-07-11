@@ -22,6 +22,16 @@
                 </div>
             </el-tooltip>
 
+            <!-- 跳转前台首页 -->
+            <el-tooltip class="box-item" effect="dark" content="前台首页" placement="bottom">
+                <div class="w-[42px] h-[64px] cursor-pointer flex items-center justify-center text-gray-700 hover:bg-gray-200"
+                    @click="handleOpenFrontend">
+                    <el-icon>
+                        <Monitor />
+                    </el-icon>
+                </div>
+            </el-tooltip>
+
             <!-- 点击全屏展示 -->
             <el-tooltip class="box-item" effect="dark" content="全屏" placement="bottom">
                 <div class="w-[42px] h-[64px] cursor-pointer flex items-center justify-center text-gray-700 mr-2 hover:bg-gray-200"
@@ -37,9 +47,8 @@
             <el-dropdown class="flex items-center justify-center" @command="handleCommand">
                 <span class="el-dropdown-link flex items-center justify-center text-gray-700 text-xs">
                     <!-- 头像 Avatar -->
-                    <el-avatar class="mr-2" :size="25"
-                        src="https://img.quanxiaoha.com/quanxiaoha/f97361c0429d4bb1bc276ab835843065.jpg" />
-                    {{ userStore.userInfo.username }}
+                    <el-avatar class="mr-2" :size="25" :src="userAvatar" />
+                    {{ displayName }}
                     <el-icon class="el-icon--right">
                         <arrow-down />
                     </el-icon>
@@ -82,7 +91,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch } from 'vue'
+import { computed, ref, reactive, watch } from 'vue'
 import { useMenuStore } from '@/stores/menu'
 import { useUserStore } from '@/stores/user'
 import { useFullscreen } from '@vueuse/core'
@@ -100,6 +109,14 @@ const menuStore = useMenuStore()
 // 引入了用户 Store
 const userStore = useUserStore()
 
+const userAvatar = computed(() => userStore.userInfo?.userAvatar || '')
+const displayName = computed(() =>
+    userStore.userInfo?.userName
+    || userStore.userInfo?.username
+    || userStore.userInfo?.userAccount
+    || '未登录用户'
+)
+
 // icon 点击事件
 const handleMenuWidth = () => {
     menuStore.handleMenuWidth()
@@ -107,6 +124,12 @@ const handleMenuWidth = () => {
 
 // 刷新页面
 const handleRefresh = () => location.reload()
+
+// 新开标签页跳转前台首页
+const handleOpenFrontend = () => {
+    const frontendUrl = router.resolve('/').href
+    window.open(frontendUrl, '_blank')
+}
 
 // 对话框是否显示
 const dialogVisible = ref(false)

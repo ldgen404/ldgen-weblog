@@ -2,7 +2,9 @@ package com.ldgen.weblog.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
+import com.ldgen.weblog.annotation.ApiOperationLog;
 import com.ldgen.weblog.model.dto.user.*;
+import com.ldgen.weblog.model.vo.blogsettings.FindBlogSettingsDetailRspVO;
 import com.mybatisflex.core.paginate.Page;
 import com.ldgen.weblog.annotation.AuthCheck;
 import com.ldgen.weblog.common.BaseResponse;
@@ -16,6 +18,7 @@ import com.ldgen.weblog.model.vo.LoginUserVO;
 import com.ldgen.weblog.model.vo.UserVO;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +36,7 @@ import java.util.Map;
  *
  * @author ldgen
  */
+@Slf4j
 @RestController
 @RequestMapping("/user")
 public class UserController {
@@ -86,6 +90,17 @@ public class UserController {
     public BaseResponse<LoginUserVO> getLoginUser(HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         return ResultUtils.success(userService.getLoginUserVO(loginUser));
+    }
+
+    /**
+     * 获取前台博客设置信息
+     *
+     * @return 博客设置详情
+     */
+    @GetMapping("/blog/settings")
+    @ApiOperationLog(description = "获取前台博客设置信息")
+    public BaseResponse<FindBlogSettingsDetailRspVO> findBlogSettingsDetail() {
+        return ResultUtils.success(userService.findBlogSettingsDetail());
     }
 
     /**
@@ -159,13 +174,17 @@ public class UserController {
      */
     @PostMapping("/update")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Boolean> updateUser(@RequestBody UserUpdateRequest userUpdateRequest) {
+    public BaseResponse<Boolean> updateUser(@RequestBody UserUpdateRequest userUpdateRequest,HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        userUpdateRequest.setId(loginUser.getId());
         if (userUpdateRequest == null || userUpdateRequest.getId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User user = new User();
         BeanUtil.copyProperties(userUpdateRequest, user);
+        log.info("更新用户：{}",userUpdateRequest);
         boolean result = userService.updateById(user);
+        log.info("更新用户成功：{}",result);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
     }

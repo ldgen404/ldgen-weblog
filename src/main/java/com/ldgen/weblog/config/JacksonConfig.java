@@ -20,9 +20,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.TimeZone;
 
 /**
- * @author: 犬小哈
- * @url: www.quanxiaoha.com
- * @date: 2023-08-17 16:08
+ * @author: ldgen
+ * @url: github.com/ldgen404/ldgen-weblog
+ * @date: 2026-08-17 16:08
  * @description: 自定义 Jackson
  **/
 @Configuration

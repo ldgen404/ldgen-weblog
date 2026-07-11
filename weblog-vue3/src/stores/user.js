@@ -7,12 +7,17 @@ export const useUserStore = defineStore('user', () => {
   // 用户信息
   const userInfo = ref({})
 
+  // 直接设置用户信息
+  function setUserInfoData(data = {}) {
+    userInfo.value = data || {}
+  }
+
   // 设置用户信息
   function setUserInfo() {
     // 调用后头获取用户信息接口
     getUserInfo().then(res => {
-      if (res.success == true) {
-        userInfo.value = res.data
+      if (res.code === 0 || res.success === true) {
+        userInfo.value = res.data || {}
       }
     })
   }
@@ -25,7 +30,7 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = {}
   }
 
-  return { userInfo, setUserInfo, logout }
+  return { userInfo, setUserInfo, setUserInfoData, logout }
 }, 
 {
   // 开启持久化

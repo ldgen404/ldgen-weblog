@@ -5,9 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * @author: 犬小哈
- * @url: www.quanxiaoha.com
- * @date: 2023-08-14 16:27
+ * @author: ldgen
+ * @url: github.com/ldgen404/ldgen-weblog
+ * @date: 2026-08-14 16:27
  * @description: JSON 工具类
  **/
 @Slf4j

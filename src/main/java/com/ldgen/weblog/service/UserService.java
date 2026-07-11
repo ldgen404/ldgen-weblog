@@ -4,6 +4,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import com.ldgen.weblog.model.dto.user.UserQueryRequest;
 import com.ldgen.weblog.model.entity.User;
+import com.ldgen.weblog.model.vo.blogsettings.FindBlogSettingsDetailRspVO;
 import com.ldgen.weblog.model.vo.LoginUserVO;
 import com.ldgen.weblog.model.vo.UserVO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -91,4 +92,11 @@ public interface UserService extends IService<User> {
      * @return 加密后的用户密码
      */
     String getEncryptPassword(String userPassword);
+
+    /**
+     * 获取前台博客设置信息
+     *
+     * @return 博客设置信息
+     */
+    FindBlogSettingsDetailRspVO findBlogSettingsDetail();
 }

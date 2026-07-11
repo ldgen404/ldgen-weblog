@@ -5,7 +5,15 @@
             <!-- flex 布局，内容垂直居中 -->
             <div class="flex items-center">
                 <el-text>标签名称</el-text>
-                <div class="ml-3 w-52 mr-5"><el-input v-model="searchTagName" placeholder="请输入（模糊查询）" /></div>
+                <div class="ml-3 w-52 mr-5">
+                    <el-input
+                        v-model="searchTagName"
+                        placeholder="请输入（模糊查询）"
+                        clearable
+                        @input="triggerSearch"
+                        @clear="reset"
+                    />
+                </div>
 
                 <el-text>创建日期</el-text>
                 <div class="ml-3 w-30 mr-5">
@@ -14,7 +22,7 @@
                         end-placeholder="结束时间" size="default" :shortcuts="shortcuts" @change="datepickerChange" />
                 </div>
 
-                <el-button type="primary" class="ml-3" :icon="Search" :loading="tableLoading" @click="getTableData">查询</el-button>
+                <el-button type="primary" class="ml-3" :icon="Search" :loading="tableLoading" @click="handleSearch">查询</el-button>
                 <el-button class="ml-3" :icon="RefreshRight" :disabled="tableLoading" @click="reset">重置</el-button>
             </div>
         </el-card>
@@ -102,12 +110,13 @@ const datepickerChange = (e) => {
     if (!e) {
         startDate.value = ''
         endDate.value = ''
+        triggerSearch()
         return
     }
     startDate.value = moment(e[0]).format('YYYY-MM-DD')
     endDate.value = moment(e[1]).format('YYYY-MM-DD')
 
-    console.log('开始时间：' + startDate.value + ', 结束时间：' + endDate.value)
+    triggerSearch()
 }
 
 const shortcuts = [
@@ -150,6 +159,7 @@ const current = ref(1)
 const total = ref(0)
 // 每页显示的数据量，给了个默认值 10
 const size = ref(10)
+let searchTimer = null
 
 
 // 获取分页数据
@@ -168,20 +178,33 @@ function getTableData() {
         .then((res) => {
             if (res.code == 0) {
                 let data = res.data
-                tableData.value = data.records
-                current.value = data.pageNum
-                size.value = data.pageSize
-                total.value = data.totalRow
+                tableData.value = data.records || []
+                current.value = data.pageNumber ?? data.pageNum ?? 1
+                size.value = data.pageSize ?? size.value
+                total.value = data.totalRow ?? 0
             }
         })
         .finally(() => tableLoading.value = false) // 隐藏表格 loading
 }
 getTableData()
 
+const handleSearch = () => {
+    current.value = 1
+    getTableData()
+}
+
+const triggerSearch = () => {
+    current.value = 1
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => {
+        getTableData()
+    }, 300)
+}
+
 // 每页展示数量变更事件
 const handleSizeChange = (chooseSize) => {
-    console.log('选择的页码' + chooseSize)
     size.value = chooseSize
+    current.value = 1
     getTableData()
 }
 
@@ -189,8 +212,11 @@ const handleSizeChange = (chooseSize) => {
 const reset = () => {
     searchTagName.value = ''
     pickDate.value = ''
-    startDate.value = null
-    endDate.value = null
+    startDate.value = ''
+    endDate.value = ''
+    current.value = 1
+    clearTimeout(searchTimer)
+    getTableData()
 }
 
 // 对话框是否显示

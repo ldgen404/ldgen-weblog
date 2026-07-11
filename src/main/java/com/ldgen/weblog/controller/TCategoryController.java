@@ -103,4 +103,15 @@ public class TCategoryController {
     public BaseResponse findCategorySelectList() {
         return tCategoryService.findCategorySelectList();
     }
+
+    /**
+     * 获取前台分类列表
+     *
+     * @return 分类列表
+     */
+    @PostMapping("/list")
+    @ApiOperationLog(description = "获取前台分类列表")
+    public BaseResponse findCategoryList() {
+        return tCategoryService.findCategoryList();
+    }
 }

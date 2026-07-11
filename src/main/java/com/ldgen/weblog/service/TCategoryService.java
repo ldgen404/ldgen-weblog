@@ -1,13 +1,14 @@
 package com.ldgen.weblog.service;
 
 import com.ldgen.weblog.common.BaseResponse;
-import com.ldgen.weblog.common.PageRequest;
 import com.ldgen.weblog.model.dto.category.AddCategoryRequest;
 import com.ldgen.weblog.model.dto.category.CategoryQueryRequest;
-import com.ldgen.weblog.model.dto.category.FindCategoryPageListRequest;
+import com.ldgen.weblog.model.vo.category.FindCategoryListRspVO;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import com.ldgen.weblog.model.entity.TCategory;
+
+import java.util.List;
 
 /**
  * 文章分类表 服务层。
@@ -36,4 +37,11 @@ public interface TCategoryService extends IService<TCategory> {
      * @return
      */
     BaseResponse findCategorySelectList();
+
+    /**
+     * 获取前台分类列表
+     *
+     * @return 分类列表
+     */
+    BaseResponse<List<FindCategoryListRspVO>> findCategoryList();
 }

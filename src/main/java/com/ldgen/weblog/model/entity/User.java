@@ -4,6 +4,7 @@ import com.mybatisflex.annotation.Column;
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
+
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
@@ -17,8 +18,6 @@ import lombok.NoArgsConstructor;
 
 /**
  * 用户 实体类。
- *
- * @author <a href="https://github.com/lildgen">程序员鱼皮</a>
  */
 @Data
 @Builder
@@ -89,6 +88,50 @@ public class User implements Serializable {
      */
     @Column("updateTime")
     private LocalDateTime updateTime;
+
+    // ===================== ↓↓↓ 新增博客配置字段 ↓↓↓ =====================
+
+    /**
+     * 博客Logo
+     */
+    @Column("webName")
+    private String webName;
+
+    /**
+     * 博客Logo
+     */
+    @Column("logo")
+    private String logo;
+
+    /**
+     * 作者名
+     */
+    @Column("author")
+    private String author;
+
+    /**
+     * GitHub 主页
+     */
+    @Column("github_homepage")
+    private String githubHomepage;
+
+    /**
+     * CSDN 主页
+     */
+    @Column("csdn_homepage")
+    private String csdnHomepage;
+
+    /**
+     * Gitee 主页
+     */
+    @Column("gitee_homepage")
+    private String giteeHomepage;
+
+    /**
+     * 知乎主页
+     */
+    @Column("zhihu_homepage")
+    private String zhihuHomepage;
 
     /**
      * 是否删除

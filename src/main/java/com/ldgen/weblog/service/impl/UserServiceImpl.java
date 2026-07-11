@@ -7,10 +7,12 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.ldgen.weblog.exception.BusinessException;
 import com.ldgen.weblog.exception.ErrorCode;
+import com.ldgen.weblog.exception.ThrowUtils;
 import com.ldgen.weblog.model.dto.user.UserQueryRequest;
 import com.ldgen.weblog.model.entity.User;
 import com.ldgen.weblog.mapper.UserMapper;
 import com.ldgen.weblog.model.enums.UserRoleEnum;
+import com.ldgen.weblog.model.vo.blogsettings.FindBlogSettingsDetailRspVO;
 import com.ldgen.weblog.model.vo.LoginUserVO;
 import com.ldgen.weblog.model.vo.UserVO;
 import com.ldgen.weblog.service.UserService;
@@ -20,6 +22,7 @@ import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -197,5 +200,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 盐值，混淆密码
         final String SALT = "ldgen";
         return DigestUtils.md5DigestAsHex((userPassword + SALT).getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public FindBlogSettingsDetailRspVO findBlogSettingsDetail() {
+        List<User> adminUserList = this.list(QueryWrapper.create()
+                .eq("userRole", UserRoleEnum.ADMIN.getValue())
+                .eq("isDelete", 0));
+
+        ThrowUtils.throwIf(CollUtil.isEmpty(adminUserList), ErrorCode.NOT_FOUND_ERROR, "博客设置信息不存在");
+
+        User adminUser = adminUserList.stream()
+                .sorted(Comparator.comparing(User::getId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND_ERROR, "博客设置信息不存在"));
+
+        FindBlogSettingsDetailRspVO rspVO = new FindBlogSettingsDetailRspVO();
+        BeanUtil.copyProperties(adminUser, rspVO);
+        return rspVO;
     }
 }

@@ -15,7 +15,9 @@ public enum ErrorCode {
     OPERATION_ERROR(50001, "操作失败"),
 
     //============业务错误码==========
-    CATEGORY_NAME_IS_EXISTED(20005, "该分类已存在，请勿重复添加！")
+    CATEGORY_NAME_IS_EXISTED(40301, "该分类已存在，请勿重复添加！"),
+    FILE_UPLOAD_FAILED(40302, "文件上传失败！"),
+    CATEGORY_NOT_EXISTED(40303, "提交的分类不存在！"),
 
 
     ;
