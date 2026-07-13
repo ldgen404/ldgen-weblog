@@ -159,9 +159,7 @@ const activeTag = computed(() => {
     return tagList.value.find(item => String(item.id) === String(activeTagId.value)) || null
 })
 
-const visitTotal = computed(() => {
-    return 0
-})
+const visitTotal = computed(() => Number(blogStore.blogSettings?.pvTotalCount || 0))
 
 const loadTagArticlePage = async () => {
     if (!activeTagId.value) {

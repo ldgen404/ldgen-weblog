@@ -4,6 +4,10 @@ import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.ldgen.weblog.constant.RedisCacheKeyConstants;
+import com.ldgen.weblog.holder.DashboardPvHolder;
+import com.ldgen.weblog.manager.RedisCacheManager;
+import com.ldgen.weblog.mapper.StatisticsArticlePvMapper;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.ldgen.weblog.exception.BusinessException;
@@ -17,14 +21,18 @@ import com.ldgen.weblog.model.vo.blogsettings.FindBlogSettingsDetailRspVO;
 import com.ldgen.weblog.model.vo.LoginUserVO;
 import com.ldgen.weblog.model.vo.UserVO;
 import com.ldgen.weblog.service.UserService;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import java.io.Serializable;
+import java.time.Duration;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.ldgen.weblog.constant.UserConstant.USER_LOGIN_STATE;
@@ -36,6 +44,11 @@ import static com.ldgen.weblog.constant.UserConstant.USER_LOGIN_STATE;
  */
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+
+    @Resource
+    private RedisCacheManager redisCacheManager;
+    @Resource
+    private StatisticsArticlePvMapper statisticsArticlePvMapper;
 
     /**
      * 用户注册
@@ -211,8 +224,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return DigestUtils.md5DigestAsHex((userPassword + SALT).getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * 获取博客设置详细信息
+     * @return
+     */
     @Override
     public FindBlogSettingsDetailRspVO findBlogSettingsDetail() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.BLOG_SETTINGS,
+                Duration.ofSeconds(30),
+                this::loadBlogSettingsDetail
+        );
+    }
+
+    private FindBlogSettingsDetailRspVO loadBlogSettingsDetail() {
         List<User> adminUserList = this.list(QueryWrapper.create()
                 .eq("userRole", UserRoleEnum.ADMIN.getValue())
                 .eq("isDelete", 0));
@@ -226,6 +251,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         FindBlogSettingsDetailRspVO rspVO = new FindBlogSettingsDetailRspVO();
         BeanUtil.copyProperties(adminUser, rspVO);
+        long persistedPvTotalCount = Objects.requireNonNullElse(statisticsArticlePvMapper.selectPvTotalCount(), 0L);
+        rspVO.setPvTotalCount(persistedPvTotalCount + DashboardPvHolder.getPendingTotalCount());
         return rspVO;
+    }
+
+    @Override
+    public boolean updateById(User entity) {
+        boolean updated = super.updateById(entity);
+        if (updated) {
+            redisCacheManager.delete(RedisCacheKeyConstants.BLOG_SETTINGS);
+        }
+        return updated;
+    }
+
+    @Override
+    public boolean removeById(Serializable id) {
+        boolean removed = super.removeById(id);
+        if (removed) {
+            redisCacheManager.delete(RedisCacheKeyConstants.BLOG_SETTINGS);
+        }
+        return removed;
     }
 }

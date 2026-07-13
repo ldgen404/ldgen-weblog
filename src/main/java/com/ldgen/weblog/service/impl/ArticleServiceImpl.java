@@ -2,10 +2,12 @@ package com.ldgen.weblog.service.impl;
 
 import com.ldgen.weblog.common.BaseResponse;
 import com.ldgen.weblog.common.ResultUtils;
+import com.ldgen.weblog.constant.RedisCacheKeyConstants;
 import com.ldgen.weblog.event.ReadArticleEvent;
 import com.ldgen.weblog.exception.BusinessException;
 import com.ldgen.weblog.exception.ErrorCode;
 import com.ldgen.weblog.exception.ThrowUtils;
+import com.ldgen.weblog.manager.RedisCacheManager;
 import com.ldgen.weblog.mapper.ArticleCategoryRelMapper;
 import com.ldgen.weblog.mapper.ArticleContentMapper;
 import com.ldgen.weblog.mapper.ArticleTagRelMapper;
@@ -43,6 +45,7 @@ import org.springframework.util.StringUtils;
 import com.ldgen.weblog.utils.MarkdownUtils;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -77,6 +80,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private ArticleTagRelMapper articleTagRelMapper;
     @Resource
     private ApplicationEventPublisher applicationEventPublisher;
+    @Resource
+    private RedisCacheManager redisCacheManager;
 
     /**
      * 发布文章
@@ -127,6 +132,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         List<String> publishTags = publishArticleRequest.getTags();
         insertTags(articleId, publishTags);
+        clearArticleRelatedCaches();
 
         return ResultUtils.success("发布成功");
     }
@@ -160,6 +166,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         saveOrUpdateArticleCategory(articleId, updateArticleRequest.getCategoryId());
         articleTagRelMapper.deleteByQuery(QueryWrapper.create().eq("article_id", articleId));
         insertTags(articleId, updateArticleRequest.getTags());
+        clearArticleRelatedCaches();
 
         return ResultUtils.success(true);
     }
@@ -426,17 +433,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     public BaseResponse findArticlePageList(FindIndexArticlePageListReqVO findIndexArticlePageListReqVO) {
         ThrowUtils.throwIf(findIndexArticlePageListReqVO == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
-
-        long pageNum = findIndexArticlePageListReqVO.getPageNum();
-        long pageSize = findIndexArticlePageListReqVO.getPageSize();
-        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 篇文章");
-
-        QueryWrapper queryWrapper = QueryWrapper.create()
-                .eq("is_deleted", 0)
-                .orderBy("create_time", false);
-
-        Page<Article> articlePage = this.page(Page.of(pageNum, pageSize), queryWrapper);
-        return buildArticlePageResponse(articlePage, pageNum, pageSize);
+        String cacheKey = RedisCacheKeyConstants.ARTICLE_INDEX_PAGE_PREFIX
+                + findIndexArticlePageListReqVO.getPageNum() + ":" + findIndexArticlePageListReqVO.getPageSize();
+        return redisCacheManager.getOrLoad(
+                cacheKey,
+                Duration.ofMinutes(3),
+                () -> loadArticlePageList(findIndexArticlePageListReqVO)
+        );
     }
 
     /**
@@ -448,7 +451,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     public BaseResponse findCategoryArticlePageList(FindCategoryArticlePageListReqVO findCategoryArticlePageListReqVO) {
         ThrowUtils.throwIf(findCategoryArticlePageListReqVO == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
+        String cacheKey = RedisCacheKeyConstants.ARTICLE_CATEGORY_PAGE_PREFIX
+                + findCategoryArticlePageListReqVO.getCategoryId() + ":"
+                + findCategoryArticlePageListReqVO.getPageNum() + ":"
+                + findCategoryArticlePageListReqVO.getPageSize();
+        return redisCacheManager.getOrLoad(
+                cacheKey,
+                Duration.ofMinutes(3),
+                () -> loadCategoryArticlePageList(findCategoryArticlePageListReqVO)
+        );
+    }
 
+    private BaseResponse loadCategoryArticlePageList(FindCategoryArticlePageListReqVO findCategoryArticlePageListReqVO) {
         Long categoryId = findCategoryArticlePageListReqVO.getCategoryId();
         ThrowUtils.throwIf(Objects.isNull(categoryId), ErrorCode.PARAMS_ERROR, "分类 ID 不能为空");
 
@@ -493,7 +507,18 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     public BaseResponse findTagArticlePageList(FindTagArticlePageListReqVO findTagArticlePageListReqVO) {
         ThrowUtils.throwIf(findTagArticlePageListReqVO == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
+        String cacheKey = RedisCacheKeyConstants.ARTICLE_TAG_PAGE_PREFIX
+                + findTagArticlePageListReqVO.getTagId() + ":"
+                + findTagArticlePageListReqVO.getPageNum() + ":"
+                + findTagArticlePageListReqVO.getPageSize();
+        return redisCacheManager.getOrLoad(
+                cacheKey,
+                Duration.ofMinutes(3),
+                () -> loadTagArticlePageList(findTagArticlePageListReqVO)
+        );
+    }
 
+    private BaseResponse loadTagArticlePageList(FindTagArticlePageListReqVO findTagArticlePageListReqVO) {
         Long tagId = findTagArticlePageListReqVO.getTagId();
         ThrowUtils.throwIf(Objects.isNull(tagId), ErrorCode.PARAMS_ERROR, "标签 ID 不能为空");
 
@@ -527,6 +552,39 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         Page<Article> articlePage = this.page(Page.of(pageNum, pageSize), queryWrapper);
         return buildArticlePageResponse(articlePage, pageNum, pageSize);
+    }
+
+    private BaseResponse loadArticlePageList(FindIndexArticlePageListReqVO findIndexArticlePageListReqVO) {
+        long pageNum = findIndexArticlePageListReqVO.getPageNum();
+        long pageSize = findIndexArticlePageListReqVO.getPageSize();
+        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 篇文章");
+
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .eq("is_deleted", 0)
+                .orderBy("create_time", false);
+
+        Page<Article> articlePage = this.page(Page.of(pageNum, pageSize), queryWrapper);
+        return buildArticlePageResponse(articlePage, pageNum, pageSize);
+    }
+
+    @Override
+    public boolean removeById(java.io.Serializable id) {
+        boolean removed = super.removeById(id);
+        if (removed) {
+            clearArticleRelatedCaches();
+        }
+        return removed;
+    }
+
+    private void clearArticleRelatedCaches() {
+        redisCacheManager.deleteByPrefix(RedisCacheKeyConstants.ARTICLE_INDEX_PAGE_PREFIX);
+        redisCacheManager.deleteByPrefix(RedisCacheKeyConstants.ARTICLE_CATEGORY_PAGE_PREFIX);
+        redisCacheManager.deleteByPrefix(RedisCacheKeyConstants.ARTICLE_TAG_PAGE_PREFIX);
+        redisCacheManager.deleteByPrefix(RedisCacheKeyConstants.ARCHIVE_PAGE_PREFIX);
+        redisCacheManager.deleteKeys(
+                RedisCacheKeyConstants.DASHBOARD_STATISTICS,
+                RedisCacheKeyConstants.DASHBOARD_PUBLISH_HOTSPOT
+        );
     }
 
     private BaseResponse buildArticlePageResponse(Page<Article> articlePage, long pageNum, long pageSize) {

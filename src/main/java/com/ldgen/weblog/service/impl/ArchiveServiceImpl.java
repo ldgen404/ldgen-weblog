@@ -2,30 +2,35 @@ package com.ldgen.weblog.service.impl;
 
 import com.ldgen.weblog.common.BaseResponse;
 import com.ldgen.weblog.common.ResultUtils;
+import com.ldgen.weblog.constant.RedisCacheKeyConstants;
 import com.ldgen.weblog.convert.ArticleConvert;
 import com.ldgen.weblog.exception.ErrorCode;
 import com.ldgen.weblog.exception.ThrowUtils;
+import com.ldgen.weblog.manager.RedisCacheManager;
 import com.ldgen.weblog.mapper.ArticleMapper;
 import com.ldgen.weblog.model.dto.article.FindArchiveArticlePageListReqVO;
 import com.ldgen.weblog.model.entity.Article;
 import com.ldgen.weblog.model.vo.article.FindArchiveArticlePageListRspVO;
 import com.ldgen.weblog.model.vo.article.FindArchiveArticleRspVO;
 import com.ldgen.weblog.service.ArchiveService;
-import com.ldgen.weblog.service.ArticleService;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import com.mybatisflex.core.paginate.Page;
+
+import jakarta.annotation.Resource;
+import java.time.Duration;
 import java.time.YearMonth;
 import java.util.*;
 
 @Service
 @Slf4j
 public class ArchiveServiceImpl extends ServiceImpl<ArticleMapper, Article> implements ArchiveService {
+
+    @Resource
+    private RedisCacheManager redisCacheManager;
 
     /**
      * 根据归档查询文章列表
@@ -35,7 +40,17 @@ public class ArchiveServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Override
     public BaseResponse findArchivePageList(FindArchiveArticlePageListReqVO findArchiveArticlePageListReqVO) {
         ThrowUtils.throwIf(findArchiveArticlePageListReqVO == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
+        String cacheKey = RedisCacheKeyConstants.ARCHIVE_PAGE_PREFIX
+                + findArchiveArticlePageListReqVO.getPageNum() + ":"
+                + findArchiveArticlePageListReqVO.getPageSize();
+        return redisCacheManager.getOrLoad(
+                cacheKey,
+                Duration.ofMinutes(5),
+                () -> loadArchivePageList(findArchiveArticlePageListReqVO)
+        );
+    }
 
+    private BaseResponse loadArchivePageList(FindArchiveArticlePageListReqVO findArchiveArticlePageListReqVO) {
         long pageNum = findArchiveArticlePageListReqVO.getPageNum();
         long pageSize = findArchiveArticlePageListReqVO.getPageSize();
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 篇文章");
@@ -75,12 +90,5 @@ public class ArchiveServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         rspPage.setRecords(rspList);
         return ResultUtils.success(rspPage);
     }
-
-
-
-
-
-
-
 
 }

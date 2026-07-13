@@ -181,9 +181,7 @@ const total = ref(0)
 const categoryList = computed(() => blogStore.categoryList)
 const tagList = computed(() => blogStore.tagList)
 
-const visitTotal = computed(() => {
-    return 0
-})
+const visitTotal = computed(() => Number(blogStore.blogSettings?.pvTotalCount || 0))
 
 const getDateParts = (value) => {
     if (Array.isArray(value)) {

@@ -1,28 +1,28 @@
 package com.ldgen.weblog.service.impl;
 
 import com.ldgen.weblog.common.BaseResponse;
-import com.ldgen.weblog.common.PageRequest;
 import com.ldgen.weblog.common.ResultUtils;
+import com.ldgen.weblog.constant.RedisCacheKeyConstants;
 import com.ldgen.weblog.exception.BusinessException;
 import com.ldgen.weblog.exception.ErrorCode;
+import com.ldgen.weblog.manager.RedisCacheManager;
+import com.ldgen.weblog.mapper.TCategoryMapper;
 import com.ldgen.weblog.model.dto.category.AddCategoryRequest;
 import com.ldgen.weblog.model.dto.category.CategoryQueryRequest;
-import com.ldgen.weblog.model.dto.category.FindCategoryPageListRequest;
-import com.ldgen.weblog.model.vo.FindCategoryPageListRspVO;
+import com.ldgen.weblog.model.entity.TCategory;
 import com.ldgen.weblog.model.vo.SelectRspVO;
 import com.ldgen.weblog.model.vo.category.FindCategoryListRspVO;
-import com.mybatisflex.core.paginate.Page;
+import com.ldgen.weblog.service.TCategoryService;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
-import com.ldgen.weblog.mapper.TCategoryMapper;
-import com.ldgen.weblog.model.entity.TCategory;
-import com.ldgen.weblog.service.TCategoryService;
-import org.apache.commons.lang3.StringUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.io.Serializable;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -42,6 +42,9 @@ public class TCategoryServiceImpl extends ServiceImpl<TCategoryMapper, TCategory
 
     @Resource
     private TCategoryMapper tCategoryMapper;
+
+    @Resource
+    private RedisCacheManager redisCacheManager;
 
     /**
      * 、
@@ -66,6 +69,7 @@ public class TCategoryServiceImpl extends ServiceImpl<TCategoryMapper, TCategory
                 .isDeleted(0)
                 .build();
         tCategoryMapper.insert(tCategory);
+        clearCategoryCaches();
         return ResultUtils.success("添加成功");
     }
 
@@ -100,20 +104,11 @@ public class TCategoryServiceImpl extends ServiceImpl<TCategoryMapper, TCategory
      */
     @Override
     public BaseResponse findCategorySelectList() {
-        List<TCategory> tCategories = tCategoryMapper.selectAll();
-        // DO 转 VO
-        List<SelectRspVO> selectRspVOS = null;
-        // 如果分类数据不为空
-        if (!CollectionUtils.isEmpty(tCategories)) {
-            // 将分类 ID 作为 Value 值，将分类名称作为 label 展示
-            selectRspVOS = tCategories.stream()
-                    .map(categoryDO -> SelectRspVO.builder()
-                            .label(categoryDO.getCategoryName())
-                            .value(categoryDO.getId())
-                            .build()
-                    ).collect(Collectors.toList());
-        }
-        return ResultUtils.success(selectRspVOS);
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.CATEGORY_SELECT,
+                Duration.ofMinutes(10),
+                this::loadCategorySelectList
+        );
     }
 
     /**
@@ -123,6 +118,37 @@ public class TCategoryServiceImpl extends ServiceImpl<TCategoryMapper, TCategory
      */
     @Override
     public BaseResponse<List<FindCategoryListRspVO>> findCategoryList() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.CATEGORY_LIST,
+                Duration.ofMinutes(10),
+                this::loadCategoryList
+        );
+    }
+
+    @Override
+    public boolean removeById(Serializable id) {
+        boolean removed = super.removeById(id);
+        if (removed) {
+            clearCategoryCaches();
+        }
+        return removed;
+    }
+
+    private BaseResponse<List<SelectRspVO>> loadCategorySelectList() {
+        List<TCategory> tCategories = tCategoryMapper.selectAll();
+        List<SelectRspVO> selectRspVOS = null;
+        if (!CollectionUtils.isEmpty(tCategories)) {
+            selectRspVOS = tCategories.stream()
+                    .map(categoryDO -> SelectRspVO.builder()
+                            .label(categoryDO.getCategoryName())
+                            .value(categoryDO.getId())
+                            .build())
+                    .collect(Collectors.toList());
+        }
+        return ResultUtils.success(selectRspVOS);
+    }
+
+    private BaseResponse<List<FindCategoryListRspVO>> loadCategoryList() {
         List<TCategory> categoryList = tCategoryMapper.selectListByQuery(
                 QueryWrapper.create()
                         .eq("is_deleted", 0)
@@ -143,5 +169,12 @@ public class TCategoryServiceImpl extends ServiceImpl<TCategoryMapper, TCategory
         return ResultUtils.success(rspList);
     }
 
+    private void clearCategoryCaches() {
+        redisCacheManager.deleteKeys(
+                RedisCacheKeyConstants.CATEGORY_SELECT,
+                RedisCacheKeyConstants.CATEGORY_LIST,
+                RedisCacheKeyConstants.DASHBOARD_STATISTICS
+        );
+    }
 
 }

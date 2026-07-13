@@ -2,12 +2,13 @@ package com.ldgen.weblog.service.impl;
 
 import com.ldgen.weblog.common.BaseResponse;
 import com.ldgen.weblog.common.ResultUtils;
+import com.ldgen.weblog.constant.RedisCacheKeyConstants;
 import com.ldgen.weblog.exception.BusinessException;
 import com.ldgen.weblog.exception.ErrorCode;
 import com.ldgen.weblog.exception.ThrowUtils;
+import com.ldgen.weblog.manager.RedisCacheManager;
 import com.ldgen.weblog.model.dto.tag.AddTagRequest;
 import com.ldgen.weblog.model.dto.tag.TagQueryRequest;
-import com.ldgen.weblog.model.entity.TCategory;
 import com.ldgen.weblog.model.vo.SelectRspVO;
 import com.ldgen.weblog.model.vo.tag.FindTagListRspVO;
 import com.mybatisflex.core.query.QueryWrapper;
@@ -21,6 +22,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.io.Serializable;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -39,6 +42,9 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
 
     @Resource
     private TagMapper tagMapper;
+
+    @Resource
+    private RedisCacheManager redisCacheManager;
 
     /**
      * 添加分类
@@ -72,6 +78,7 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
                         .build()
                 ).collect(Collectors.toList());
         tagMapper.insertBatch(tags);
+        clearTagCaches();
         return ResultUtils.success("添加成功");
     }
 
@@ -105,12 +112,40 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
      */
     @Override
     public BaseResponse findTagSelectList() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.TAG_SELECT,
+                Duration.ofMinutes(10),
+                this::loadTagSelectList
+        );
+    }
+
+    /**
+     * 获取前台标签列表
+     *
+     * @return 标签列表
+     */
+    @Override
+    public BaseResponse<List<FindTagListRspVO>> findTagList() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.TAG_LIST,
+                Duration.ofMinutes(10),
+                this::loadTagList
+        );
+    }
+
+    @Override
+    public boolean removeById(Serializable id) {
+        boolean removed = super.removeById(id);
+        if (removed) {
+            clearTagCaches();
+        }
+        return removed;
+    }
+
+    private BaseResponse<List<SelectRspVO>> loadTagSelectList() {
         List<Tag> tagList = tagMapper.selectAll();
-        // DO 转 VO
         List<SelectRspVO> selectRspVOS = null;
-        // 如果分类数据不为空
         if (!CollectionUtils.isEmpty(tagList)) {
-            // 将分类 ID 作为 Value 值，将分类名称作为 label 展示
             selectRspVOS = tagList.stream()
                     .map(tagDO -> SelectRspVO.builder()
                             .label(tagDO.getTagName())
@@ -121,13 +156,7 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
         return ResultUtils.success(selectRspVOS);
     }
 
-    /**
-     * 获取前台标签列表
-     *
-     * @return 标签列表
-     */
-    @Override
-    public BaseResponse<List<FindTagListRspVO>> findTagList() {
+    private BaseResponse<List<FindTagListRspVO>> loadTagList() {
         List<Tag> tagList = tagMapper.selectListByQuery(
                 QueryWrapper.create()
                         .eq("is_deleted", 0)
@@ -146,5 +175,13 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
                 .collect(Collectors.toList());
 
         return ResultUtils.success(rspList);
+    }
+
+    private void clearTagCaches() {
+        redisCacheManager.deleteKeys(
+                RedisCacheKeyConstants.TAG_SELECT,
+                RedisCacheKeyConstants.TAG_LIST,
+                RedisCacheKeyConstants.DASHBOARD_STATISTICS
+        );
     }
 }

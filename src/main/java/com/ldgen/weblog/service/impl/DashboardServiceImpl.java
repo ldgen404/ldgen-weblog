@@ -2,7 +2,9 @@ package com.ldgen.weblog.service.impl;
 
 import com.ldgen.weblog.common.BaseResponse;
 import com.ldgen.weblog.common.ResultUtils;
+import com.ldgen.weblog.constant.RedisCacheKeyConstants;
 import com.ldgen.weblog.holder.DashboardPvHolder;
+import com.ldgen.weblog.manager.RedisCacheManager;
 import com.ldgen.weblog.mapper.ArticleMapper;
 import com.ldgen.weblog.mapper.StatisticsArticlePvMapper;
 import com.ldgen.weblog.mapper.TCategoryMapper;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Duration;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -41,9 +44,49 @@ public class DashboardServiceImpl implements DashboardService {
     private TagMapper tagMapper;
     @Resource
     private StatisticsArticlePvMapper statisticsArticlePvMapper;
+    @Resource
+    private RedisCacheManager redisCacheManager;
 
+    /**
+     * 获取仪表盘统计信息
+     * @return
+     */
     @Override
     public BaseResponse<FindDashboardStatisticsRspVO> findDashboardStatistics() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.DASHBOARD_STATISTICS,
+                Duration.ofSeconds(30),
+                this::loadDashboardStatistics
+        );
+    }
+
+    /**
+     * 获取仪表盘发布热点
+     * @return
+     */
+    @Override
+    public BaseResponse<FindDashboardPublishHotspotRspVO> findDashboardPublishHotspot() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.DASHBOARD_PUBLISH_HOTSPOT,
+                Duration.ofSeconds(30),
+                this::loadDashboardPublishHotspot
+        );
+    }
+
+    /**
+     * 获取仪表盘pv统计
+     * @return
+     */
+    @Override
+    public BaseResponse<FindDashboardPvStatisticsRspVO> findDashboardPvStatistics() {
+        return redisCacheManager.getOrLoad(
+                RedisCacheKeyConstants.DASHBOARD_PV_WEEKLY,
+                Duration.ofSeconds(30),
+                this::loadDashboardPvStatistics
+        );
+    }
+
+    private BaseResponse<FindDashboardStatisticsRspVO> loadDashboardStatistics() {
         long articleTotalCount = articleMapper.selectCountByQuery(QueryWrapper.create().eq("is_deleted", 0));
         long categoryTotalCount = categoryMapper.selectCountByQuery(QueryWrapper.create().eq("is_deleted", 0));
         long tagTotalCount = tagMapper.selectCountByQuery(QueryWrapper.create().eq("is_deleted", 0));
@@ -60,8 +103,7 @@ public class DashboardServiceImpl implements DashboardService {
         return ResultUtils.success(rspVO);
     }
 
-    @Override
-    public BaseResponse<FindDashboardPublishHotspotRspVO> findDashboardPublishHotspot() {
+    private BaseResponse<FindDashboardPublishHotspotRspVO> loadDashboardPublishHotspot() {
         YearMonth currentMonth = YearMonth.now();
         YearMonth startMonth = currentMonth.minusMonths(5);
 
@@ -102,8 +144,7 @@ public class DashboardServiceImpl implements DashboardService {
                 .build());
     }
 
-    @Override
-    public BaseResponse<FindDashboardPvStatisticsRspVO> findDashboardPvStatistics() {
+    private BaseResponse<FindDashboardPvStatisticsRspVO> loadDashboardPvStatistics() {
         LocalDate today = LocalDate.now();
         LocalDate startDate = today.minusDays(6);
         List<StatisticsArticlePv> statisticsList = statisticsArticlePvMapper.selectLatestDays(startDate);

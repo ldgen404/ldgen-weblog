@@ -156,9 +156,7 @@ const activeCategory = computed(() => {
     return categoryList.value.find(item => String(item.id) === String(activeCategoryId.value)) || null
 })
 
-const visitTotal = computed(() => {
-    return 0
-})
+const visitTotal = computed(() => Number(blogStore.blogSettings?.pvTotalCount || 0))
 
 const loadCategoryArticlePage = async () => {
     if (!activeCategoryId.value) {

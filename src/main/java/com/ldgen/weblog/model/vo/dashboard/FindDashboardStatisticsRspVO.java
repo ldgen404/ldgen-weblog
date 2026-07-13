@@ -7,7 +7,12 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-
+/**
+ * 获取仪表盘基础统计数据响应VO
+ *
+ * @author <a href="https://github.com/ld417">ld417</a>
+ * @date 2023/08/07
+ */
 @Data
 @Builder
 @NoArgsConstructor

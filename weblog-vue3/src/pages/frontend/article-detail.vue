@@ -114,37 +114,36 @@
                     </div>
                 </section>
 
-                <aside class="space-y-4">
-                    <div class="space-y-4 lg:sticky lg:top-[92px]">
-                        <TocCard
-                            :items="tocItems"
-                            :active-id="activeHeadingId"
-                            @select="scrollToHeading"
-                        />
+                <aside class="space-y-3">
+                    <BloggerInfoCard
+                        :article-total="0"
+                        :category-total="categoryList.length"
+                        :tag-total="tagList.length"
+                        :visit-total="visitTotal"
+                    />
 
-                        <BloggerInfoCard
-                            :article-total="0"
-                            :category-total="categoryList.length"
-                            :tag-total="tagList.length"
-                            :visit-total="visitTotal"
-                        />
+                    <CategoryTagCard
+                        title="分类"
+                        :items="categoryList"
+                        empty-text="暂无分类"
+                        @select="goCategory"
+                    />
 
-                        <CategoryTagCard
-                            title="分类"
-                            :items="categoryList"
-                            empty-text="暂无分类"
-                            @select="goCategory"
-                        />
+                    <CategoryTagCard
+                        title="标签"
+                        :items="tagList"
+                        type="tag"
+                        prefix="#"
+                        empty-text="暂无标签"
+                        @select="goTag"
+                    />
 
-                        <CategoryTagCard
-                            title="标签"
-                            :items="tagList"
-                            type="tag"
-                            prefix="#"
-                            empty-text="暂无标签"
-                            @select="goTag"
-                        />
-                    </div>
+                    <TocCard
+                        class="lg:sticky lg:top-[88px]"
+                        :items="tocItems"
+                        :active-id="activeHeadingId"
+                        @select="scrollToHeading"
+                    />
                 </aside>
             </div>
         </main>
@@ -178,10 +177,11 @@ const articleDetail = ref(null)
 const articleContentRef = ref(null)
 const tocItems = ref([])
 const activeHeadingId = ref('')
+let scrollSyncRafId = 0
 
 const categoryList = computed(() => blogStore.categoryList)
 const tagList = computed(() => blogStore.tagList)
-const visitTotal = computed(() => 0)
+const visitTotal = computed(() => Number(blogStore.blogSettings?.pvTotalCount || 0))
 const coverUrl = computed(() => articleDetail.value?.cover || developerImage)
 const viewerOptions = {
     toolbar: true,
@@ -216,6 +216,7 @@ const loadArticleDetail = async () => {
         const res = await getFrontendArticleDetail(articleId)
         if (res.code === 0 && res.data) {
             articleDetail.value = res.data
+            blogStore.fetchBlogSettings(true).catch(() => {})
             await nextTick()
             enhanceArticleContent()
             return
@@ -303,7 +304,7 @@ const enhanceArticleContent = () => {
     })
 
     buildToc()
-    syncActiveHeading()
+    scheduleSyncActiveHeading()
 }
 
 const buildToc = () => {
@@ -345,16 +346,27 @@ const syncActiveHeading = () => {
         return
     }
 
-    const scrollTop = window.scrollY + 120
+    const activationOffset = 140
     let currentId = tocItems.value[0].id
 
     headings.forEach((heading) => {
-        if (heading.offsetTop <= scrollTop) {
+        if (heading.getBoundingClientRect().top <= activationOffset) {
             currentId = heading.id
         }
     })
 
     activeHeadingId.value = currentId
+}
+
+const scheduleSyncActiveHeading = () => {
+    if (scrollSyncRafId) {
+        return
+    }
+
+    scrollSyncRafId = window.requestAnimationFrame(() => {
+        scrollSyncRafId = 0
+        syncActiveHeading()
+    })
 }
 
 const scrollToHeading = (item) => {
@@ -363,6 +375,7 @@ const scrollToHeading = (item) => {
         return
     }
 
+    activeHeadingId.value = item.id
     window.scrollTo({
         top: target.getBoundingClientRect().top + window.scrollY - 96,
         behavior: 'smooth',
@@ -412,11 +425,15 @@ onMounted(async () => {
     ])
 
     await loadArticleDetail()
-    window.addEventListener('scroll', syncActiveHeading, { passive: true })
+    window.addEventListener('scroll', scheduleSyncActiveHeading, { passive: true })
 })
 
 onBeforeUnmount(() => {
-    window.removeEventListener('scroll', syncActiveHeading)
+    window.removeEventListener('scroll', scheduleSyncActiveHeading)
+    if (scrollSyncRafId) {
+        window.cancelAnimationFrame(scrollSyncRafId)
+        scrollSyncRafId = 0
+    }
 })
 </script>
 

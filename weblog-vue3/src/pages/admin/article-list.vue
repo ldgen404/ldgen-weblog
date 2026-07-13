@@ -253,7 +253,7 @@
             </template>
 
             <div class="import-tip">
-                支持一次选择多个 `.md` 文件。系统会自动解析标题和摘要，并使用你在下方统一设置的分类、标签和封面批量发布。
+                支持一次选择多个 `.md` 文件。若 Markdown 中引用了本地图片，建议直接选择整个文章目录，系统会自动上传正文图片并替换为线上地址。
             </div>
 
             <input
@@ -264,10 +264,20 @@
                 multiple
                 @change="handleMarkdownFilesChange"
             />
+            <input
+                ref="markdownDirectoryInputRef"
+                class="hidden-file-input"
+                type="file"
+                multiple
+                webkitdirectory
+                @change="handleMarkdownDirectoryChange"
+            />
 
             <div class="import-toolbar">
                 <el-button type="primary" plain @click="triggerMarkdownSelect">选择 Markdown 文件</el-button>
-                <span class="import-count">已选择 {{ importFileList.length }} 个文件</span>
+                <el-button plain @click="triggerMarkdownDirectorySelect">选择目录（含图片）</el-button>
+                <span class="import-count">已选择 {{ importFileList.length }} 个 Markdown 文件</span>
+                <span v-if="importAssetCount > 0" class="import-count">已识别 {{ importAssetCount }} 张正文图片</span>
                 <el-button link type="danger" :disabled="importLoading || importFileList.length === 0" @click="clearImportFiles">
                     清空文件
                 </el-button>
@@ -418,6 +428,7 @@ const importLoading = ref(false)
 const formRef = ref(null)
 const importFormRef = ref(null)
 const markdownInputRef = ref(null)
+const markdownDirectoryInputRef = ref(null)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -427,6 +438,10 @@ const categoryOptions = ref([])
 const tagOptions = ref([])
 const importFileList = ref([])
 const importResultText = ref('')
+const importAssetCount = ref(0)
+const importAssetFileMap = ref(new Map())
+const importAssetNameMap = ref(new Map())
+const uploadedAssetUrlMap = ref(new Map())
 
 const editorForm = reactive({
     id: null,
@@ -596,6 +611,10 @@ const resetImportForm = () => {
     importForm.tags = []
     importFileList.value = []
     importResultText.value = ''
+    importAssetCount.value = 0
+    importAssetFileMap.value = new Map()
+    importAssetNameMap.value = new Map()
+    uploadedAssetUrlMap.value = new Map()
 }
 
 const formatDateTime = (value) => {
@@ -796,8 +815,122 @@ const triggerMarkdownSelect = () => {
     markdownInputRef.value?.click()
 }
 
+const triggerMarkdownDirectorySelect = () => {
+    markdownDirectoryInputRef.value?.click()
+}
+
 const normalizeMarkdownText = (content = '') => {
     return String(content).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+}
+
+const IMAGE_FILE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.avif']
+
+const isMarkdownFile = (file) => /\.md$/i.test(file?.name || '')
+
+const isImageFile = (file) => {
+    const fileName = String(file?.name || '').toLowerCase()
+    return file?.type?.startsWith?.('image/') || IMAGE_FILE_EXTENSIONS.some(ext => fileName.endsWith(ext))
+}
+
+const normalizeImportPath = (path = '') => {
+    return decodeURIComponent(String(path || ''))
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .replace(/^\/+/, '')
+        .trim()
+}
+
+const getDirname = (path = '') => {
+    const normalized = normalizeImportPath(path)
+    const lastSlashIndex = normalized.lastIndexOf('/')
+    return lastSlashIndex === -1 ? '' : normalized.slice(0, lastSlashIndex)
+}
+
+const resolveRelativePath = (baseDir, targetPath) => {
+    const normalizedTarget = normalizeImportPath(targetPath)
+    const normalizedBaseDir = normalizeImportPath(baseDir)
+    const segments = `${normalizedBaseDir ? `${normalizedBaseDir}/` : ''}${normalizedTarget}`.split('/')
+    const resolved = []
+
+    segments.forEach((segment) => {
+        if (!segment || segment === '.') {
+            return
+        }
+
+        if (segment === '..') {
+            resolved.pop()
+            return
+        }
+
+        resolved.push(segment)
+    })
+
+    return resolved.join('/')
+}
+
+const isRemoteResourcePath = (path = '') => {
+    const value = String(path || '').trim().toLowerCase()
+    return !value || /^(https?:)?\/\//.test(value) || value.startsWith('data:') || value.startsWith('blob:')
+}
+
+const extractMarkdownLinkPath = (rawTarget = '') => {
+    const target = String(rawTarget || '').trim()
+    if (!target) {
+        return ''
+    }
+
+    if (target.startsWith('<')) {
+        const endIndex = target.indexOf('>')
+        if (endIndex > 0) {
+            return target.slice(1, endIndex).trim()
+        }
+    }
+
+    const match = target.match(/^(.+?)(?:\s+["'][^"']*["'])?$/)
+    return match ? match[1].trim() : target
+}
+
+const replaceMarkdownLinkPath = (rawTarget, oldPath, newPath) => {
+    if (!rawTarget || !oldPath) {
+        return rawTarget
+    }
+
+    if (String(rawTarget).trim().startsWith('<')) {
+        return rawTarget.replace(`<${oldPath}>`, `<${newPath}>`)
+    }
+
+    return rawTarget.replace(oldPath, newPath)
+}
+
+const getFileRelativePath = (file) => {
+    return normalizeImportPath(file?.webkitRelativePath || file?.name || '')
+}
+
+const appendImportAssets = (files) => {
+    const nextFileMap = new Map(importAssetFileMap.value)
+    const nextNameMap = new Map(importAssetNameMap.value)
+
+    files.forEach((file) => {
+        if (!isImageFile(file)) {
+            return
+        }
+
+        const relativePath = getFileRelativePath(file)
+        if (!relativePath) {
+            return
+        }
+
+        nextFileMap.set(relativePath.toLowerCase(), file)
+
+        const fileName = String(file.name || '').toLowerCase()
+        const sameNameFiles = nextNameMap.get(fileName) || []
+        sameNameFiles.push(file)
+        nextNameMap.set(fileName, sameNameFiles)
+    })
+
+    importAssetFileMap.value = nextFileMap
+    importAssetNameMap.value = nextNameMap
+    importAssetCount.value = nextFileMap.size
 }
 
 const stripFrontMatter = (content) => {
@@ -894,30 +1027,34 @@ const parseMarkdownFile = async (file) => {
         title: title.slice(0, 40),
         summary,
         content: markdownBody || body.trim(),
+        relativePath: getFileRelativePath(file),
     }
 }
 
-const handleMarkdownFilesChange = async (event) => {
-    const files = Array.from(event.target?.files || [])
-    if (files.length === 0) {
+const appendParsedMarkdownFiles = async (files) => {
+    const markdownFiles = files.filter(isMarkdownFile)
+    if (markdownFiles.length === 0) {
         return
     }
 
     const parsedList = await Promise.all(
-        files.map(async (file, index) => {
+        markdownFiles.map(async (file, index) => {
+            const relativePath = getFileRelativePath(file)
             try {
                 const parsed = await parseMarkdownFile(file)
                 return {
-                    uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                    uid: `${relativePath || file.name}-${file.size}-${file.lastModified}-${index}`,
                     fileName: file.name,
+                    relativePath,
                     raw: file,
                     ...parsed,
                     status: 'pending',
                 }
             } catch (error) {
                 return {
-                    uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                    uid: `${relativePath || file.name}-${file.size}-${file.lastModified}-${index}`,
                     fileName: file.name,
+                    relativePath,
                     raw: file,
                     title: file.name.replace(/\.md$/i, ''),
                     summary: '',
@@ -933,17 +1070,142 @@ const handleMarkdownFilesChange = async (event) => {
     const nextList = parsedList.filter(item => !uidSet.has(item.uid))
     importFileList.value = [...importFileList.value, ...nextList]
     importResultText.value = ''
+}
 
+const handleMarkdownFilesChange = async (event) => {
+    const files = Array.from(event.target?.files || [])
+    if (files.length === 0) {
+        return
+    }
+
+    await appendParsedMarkdownFiles(files)
+    event.target.value = ''
+}
+
+const handleMarkdownDirectoryChange = async (event) => {
+    const files = Array.from(event.target?.files || [])
+    if (files.length === 0) {
+        return
+    }
+
+    appendImportAssets(files)
+    await appendParsedMarkdownFiles(files)
     event.target.value = ''
 }
 
 const clearImportFiles = () => {
     importFileList.value = []
     importResultText.value = ''
+    importAssetCount.value = 0
+    importAssetFileMap.value = new Map()
+    importAssetNameMap.value = new Map()
+    uploadedAssetUrlMap.value = new Map()
 }
 
 const removeImportFile = (uid) => {
     importFileList.value = importFileList.value.filter(item => item.uid !== uid)
+}
+
+const uploadInlineImage = async (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await uploadFile(formData)
+
+    if (res.code !== 0) {
+        throw new Error(res.message || '正文图片上传失败')
+    }
+
+    const url = getUploadedUrl(res)
+    if (!url) {
+        throw new Error('正文图片上传成功，但未返回访问地址')
+    }
+
+    return url
+}
+
+const resolveImportAssetFile = (targetPath, markdownRelativePath = '') => {
+    const cleanTargetPath = normalizeImportPath(targetPath)
+    if (!cleanTargetPath) {
+        return null
+    }
+
+    const markdownDir = getDirname(markdownRelativePath)
+    const resolvedPath = resolveRelativePath(markdownDir, cleanTargetPath)
+    const exactFile = importAssetFileMap.value.get(resolvedPath.toLowerCase())
+    if (exactFile) {
+        return {
+            cacheKey: resolvedPath.toLowerCase(),
+            file: exactFile,
+        }
+    }
+
+    const fileName = cleanTargetPath.split('/').pop()?.toLowerCase() || ''
+    const sameNameFiles = importAssetNameMap.value.get(fileName) || []
+    if (sameNameFiles.length === 1) {
+        return {
+            cacheKey: getFileRelativePath(sameNameFiles[0]).toLowerCase(),
+            file: sameNameFiles[0],
+        }
+    }
+
+    return null
+}
+
+const replaceLocalImagesInMarkdown = async (content, markdownRelativePath = '') => {
+    let nextContent = content
+    const markdownImageRegex = /!\[[^\]]*]\(([^)\n]+)\)/g
+    const htmlImageRegex = /<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi
+
+    const markdownTargets = new Map()
+    Array.from(content.matchAll(markdownImageRegex)).forEach((match) => {
+        const rawTarget = match[1]
+        const resourcePath = extractMarkdownLinkPath(rawTarget)
+        if (!isRemoteResourcePath(resourcePath)) {
+            markdownTargets.set(rawTarget, resourcePath)
+        }
+    })
+
+    for (const [rawTarget, resourcePath] of markdownTargets.entries()) {
+        const resolvedAsset = resolveImportAssetFile(resourcePath, markdownRelativePath)
+        if (!resolvedAsset?.file) {
+            throw new Error(`未找到正文图片资源：${resourcePath}。请使用“选择目录（含图片）”导入文章目录。`)
+        }
+
+        let uploadedUrl = uploadedAssetUrlMap.value.get(resolvedAsset.cacheKey)
+        if (!uploadedUrl) {
+            uploadedUrl = await uploadInlineImage(resolvedAsset.file)
+            uploadedAssetUrlMap.value.set(resolvedAsset.cacheKey, uploadedUrl)
+        }
+
+        const replacedTarget = replaceMarkdownLinkPath(rawTarget, resourcePath, uploadedUrl)
+        nextContent = nextContent.replaceAll(rawTarget, replacedTarget)
+    }
+
+    const htmlTargets = new Map()
+    Array.from(content.matchAll(htmlImageRegex)).forEach((match) => {
+        const resourcePath = match[1]
+        if (!isRemoteResourcePath(resourcePath)) {
+            htmlTargets.set(resourcePath, resourcePath)
+        }
+    })
+
+    for (const resourcePath of htmlTargets.keys()) {
+        const resolvedAsset = resolveImportAssetFile(resourcePath, markdownRelativePath)
+        if (!resolvedAsset?.file) {
+            throw new Error(`未找到正文图片资源：${resourcePath}。请使用“选择目录（含图片）”导入文章目录。`)
+        }
+
+        let uploadedUrl = uploadedAssetUrlMap.value.get(resolvedAsset.cacheKey)
+        if (!uploadedUrl) {
+            uploadedUrl = await uploadInlineImage(resolvedAsset.file)
+            uploadedAssetUrlMap.value.set(resolvedAsset.cacheKey, uploadedUrl)
+        }
+
+        nextContent = nextContent.replaceAll(`src="${resourcePath}"`, `src="${uploadedUrl}"`)
+        nextContent = nextContent.replaceAll(`src='${resourcePath}'`, `src='${uploadedUrl}'`)
+    }
+
+    return nextContent
 }
 
 const submitImportArticles = async () => {
@@ -969,9 +1231,10 @@ const submitImportArticles = async () => {
 
     for (const item of importFileList.value) {
         try {
+            const content = await replaceLocalImagesInMarkdown(item.content, item.relativePath)
             const res = await publishArticle({
                 title: item.title,
-                content: item.content,
+                content,
                 cover: importForm.cover,
                 summary: item.summary,
                 categoryId: importForm.categoryId,

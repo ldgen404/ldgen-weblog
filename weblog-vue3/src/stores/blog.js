@@ -13,6 +13,7 @@ const defaultSettings = {
   giteeHomepage: '',
   zhihuHomepage: '',
   csdnHomepage: '',
+  pvTotalCount: 0,
 }
 
 export const useBlogStore = defineStore('blog', () => {
@@ -21,9 +22,12 @@ export const useBlogStore = defineStore('blog', () => {
   const tagList = ref([])
   const settingsLoaded = ref(false)
   const taxonomyLoaded = ref(false)
+  const settingsLoadedAt = ref(0)
 
   async function fetchBlogSettings(force = false) {
-    if (settingsLoaded.value && !force) {
+    const isFresh = Date.now() - settingsLoadedAt.value < 30000
+
+    if (settingsLoaded.value && !force && isFresh) {
       return blogSettings.value
     }
 
@@ -34,6 +38,7 @@ export const useBlogStore = defineStore('blog', () => {
         ...res.data,
       }
       settingsLoaded.value = true
+      settingsLoadedAt.value = Date.now()
     }
     return blogSettings.value
   }

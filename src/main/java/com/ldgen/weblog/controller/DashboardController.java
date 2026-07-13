@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 仪表盘控制器
+ */
 @RestController
 @RequestMapping("/admin/dashboard")
 public class DashboardController {
@@ -20,6 +23,10 @@ public class DashboardController {
     @Resource
     private DashboardService dashboardService;
 
+    /**
+     *
+     * @return
+     */
     @PostMapping("/statistics")
     @ApiOperationLog(description = "获取仪表盘基础统计数据")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)

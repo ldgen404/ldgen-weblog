@@ -63,5 +63,10 @@ public class FindBlogSettingsDetailRspVO implements Serializable {
      */
     private String csdnHomepage;
 
+    /**
+     * 站点总访问量
+     */
+    private Long pvTotalCount;
+
     private static final long serialVersionUID = 1L;
 }

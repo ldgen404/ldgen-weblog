@@ -136,9 +136,7 @@ const filteredArticleList = computed(() => {
     })
 })
 
-const visitTotal = computed(() => {
-    return 0
-})
+const visitTotal = computed(() => Number(blogStore.blogSettings?.pvTotalCount || 0))
 
 const categoryCards = computed(() => {
     const countMap = new Map()
