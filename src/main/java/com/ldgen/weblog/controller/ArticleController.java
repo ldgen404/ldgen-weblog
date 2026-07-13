@@ -4,7 +4,9 @@ import com.ldgen.weblog.annotation.ApiOperationLog;
 import com.ldgen.weblog.annotation.AuthCheck;
 import com.ldgen.weblog.common.BaseResponse;
 import com.ldgen.weblog.constant.UserConstant;
+import com.ldgen.weblog.model.dto.article.FindCategoryArticlePageListReqVO;
 import com.ldgen.weblog.model.dto.article.FindIndexArticlePageListReqVO;
+import com.ldgen.weblog.model.dto.article.FindTagArticlePageListReqVO;
 import com.ldgen.weblog.model.dto.article.PublishArticleRequest;
 import com.ldgen.weblog.model.dto.article.UpdateArticleRequest;
 import com.mybatisflex.core.paginate.Page;
@@ -62,6 +64,30 @@ public class ArticleController {
     }
 
     /**
+     * 前台分类页文章分页查询
+     *
+     * @param findCategoryArticlePageListReqVO 请求参数
+     * @return 分类文章分页数据
+     */
+    @PostMapping("/category/list")
+    @ApiOperationLog(description = "前台分类页文章分页查询")
+    public BaseResponse findCategoryArticlePageList(@RequestBody FindCategoryArticlePageListReqVO findCategoryArticlePageListReqVO) {
+        return articleService.findCategoryArticlePageList(findCategoryArticlePageListReqVO);
+    }
+
+    /**
+     * 前台标签页文章分页查询
+     *
+     * @param findTagArticlePageListReqVO 请求参数
+     * @return 标签文章分页数据
+     */
+    @PostMapping("/tag/list")
+    @ApiOperationLog(description = "前台标签页文章分页查询")
+    public BaseResponse findTagArticlePageList(@RequestBody FindTagArticlePageListReqVO findTagArticlePageListReqVO) {
+        return articleService.findTagArticlePageList(findTagArticlePageListReqVO);
+    }
+
+    /**
      * 根据主键删除文章表。
      *
      * @param id 主键
@@ -72,11 +98,11 @@ public class ArticleController {
         return articleService.removeById(id);
     }
 
+
     /**
-     * 根据主键更新文章表。
-     *
-     * @param article 文章表
-     * @return {@code true} 更新成功，{@code false} 更新失败
+     * 更新文章表。
+     * @param updateArticleRequest
+     * @return
      */
     @PutMapping("update")
     @ApiOperationLog(description = "更新文章")
@@ -90,7 +116,7 @@ public class ArticleController {
      *
      * @return 所有数据
      */
-    @GetMapping("list")
+    @GetMapping("/list")
     public List<Article> list() {
         return articleService.list();
     }
@@ -101,11 +127,23 @@ public class ArticleController {
      * @param id 文章表主键
      * @return 文章表详情
      */
-    @GetMapping("getInfo/{id}")
+    @GetMapping("/getInfo/{id}")
     @ApiOperationLog(description = "获取文章详情")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse getInfo(@PathVariable Long id) {
         return articleService.findArticleDetail(id);
+    }
+
+    /**
+     * 获取前台文章详情
+     *
+     * @param id 文章 ID
+     * @return 前台文章详情
+     */
+    @GetMapping("/detail/{id}")
+    @ApiOperationLog(description = "获取前台文章详情")
+    public BaseResponse detail(@PathVariable Long id) {
+        return articleService.findFrontendArticleDetail(id);
     }
 
     /**
@@ -114,7 +152,7 @@ public class ArticleController {
      * @param page 分页对象
      * @return 分页对象
      */
-    @GetMapping("page")
+    @GetMapping("/page")
     public Page<Article> page(Page<Article> page) {
         return articleService.page(page);
     }

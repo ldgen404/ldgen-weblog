@@ -73,9 +73,7 @@ public class UserController {
         String userAccount = userLoginRequest.getUserAccount();
         String userPassword = userLoginRequest.getUserPassword();
         LoginUserVO loginUserVO = userService.userLogin(userAccount, userPassword, request);
-        // 2. 生成 TOKEN（就加这两行）
-        StpUtil.login(loginUserVO.getId()); // 登录
-        String token = StpUtil.getTokenValue(); // 获取token
+        String token = StpUtil.getTokenValue();
 
         // 3. 把 token + 用户信息一起返回
         Map<String, Object> map = new HashMap<>();

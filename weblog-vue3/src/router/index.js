@@ -2,6 +2,7 @@ import Index from '@/pages/frontend/index.vue'
 import FrontCategory from '@/pages/frontend/category.vue'
 import FrontTag from '@/pages/frontend/tag.vue'
 import FrontArchive from '@/pages/frontend/archive.vue'
+import FrontArticleDetail from '@/pages/frontend/article-detail.vue'
 import Login from '@/pages/admin/login.vue'
 import AdminIndex from '@/pages/admin/index.vue'
 import AdminArticleList from '@/pages/admin/article-list.vue'
@@ -10,6 +11,7 @@ import AdminTagList from '@/pages/admin/tag-list.vue'
 import AdminBlogSetting from '@/pages/admin/blog-setting.vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Admin from '@/layouts/admin/admin.vue'
+import NotFound from '@/pages/frontend/404.vue'
 
 // 统一在这里声明所有路由
 const routes = [
@@ -39,6 +41,20 @@ const routes = [
         component: FrontArchive,
         meta: {
             title: '归档'
+        }
+    },
+    {
+        path: '/article/:id',
+        component: FrontArticleDetail,
+        meta: {
+            title: '文章详情'
+        }
+    },
+    {
+        path: '/404',
+        component: NotFound,
+        meta: {
+            title: '404'
         }
     },
     {
@@ -91,7 +107,14 @@ const routes = [
             },
         ]
         
-    }
+    },
+    {
+        path: '/:pathMatch(.*)*',
+        component: NotFound,
+        meta: {
+            title: '404'
+        }
+    },
 ]
 
 // 创建路由

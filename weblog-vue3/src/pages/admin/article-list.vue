@@ -39,6 +39,10 @@
                     <el-icon class="mr-1"><EditPen /></el-icon>
                     写文章
                 </el-button>
+                <el-button class="import-btn" @click="openImportDialog">
+                    <el-icon class="mr-1"><UploadFilled /></el-icon>
+                    批量导入 .md
+                </el-button>
             </div>
 
             <el-table
@@ -50,6 +54,13 @@
                 class="article-table"
                 empty-text="暂无文章数据"
             >
+                <el-table-column label="序号" width="80" align="center" type="index" :index="getRowIndex" />
+                <el-table-column label="ID" width="90" align="center">
+                    <template #default="{ row }">
+                        {{ row.id || '-' }}
+                    </template>
+                </el-table-column>
+
                 <el-table-column label="标题" min-width="220">
                     <template #default="{ row }">
                         <div class="article-title-cell">
@@ -78,8 +89,9 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="操作" width="170" align="left">
+                <el-table-column label="操作" width="240" align="left">
                     <template #default="{ row }">
+                        <el-button size="small" plain @click="previewArticle(row)">预览</el-button>
                         <el-button size="small" plain @click="openEditDrawer(row)">编辑</el-button>
                         <el-button type="danger" size="small" @click="deleteArticleSubmit($event, row)">删除</el-button>
                     </template>
@@ -220,12 +232,163 @@
                 </div>
             </el-form>
         </el-dialog>
+
+        <el-dialog
+            v-model="importVisible"
+            width="760px"
+            destroy-on-close
+            class="article-import-dialog"
+            :close-on-click-modal="false"
+        >
+            <template #header>
+                <div class="dialog-header">
+                    <div class="dialog-title">批量导入 Markdown</div>
+                    <div class="dialog-header-actions">
+                        <el-button size="small" @click="closeImportDialog">取消</el-button>
+                        <el-button type="primary" size="small" :loading="importLoading" @click="submitImportArticles">
+                            开始导入
+                        </el-button>
+                    </div>
+                </div>
+            </template>
+
+            <div class="import-tip">
+                支持一次选择多个 `.md` 文件。系统会自动解析标题和摘要，并使用你在下方统一设置的分类、标签和封面批量发布。
+            </div>
+
+            <input
+                ref="markdownInputRef"
+                class="hidden-file-input"
+                type="file"
+                accept=".md,text/markdown"
+                multiple
+                @change="handleMarkdownFilesChange"
+            />
+
+            <div class="import-toolbar">
+                <el-button type="primary" plain @click="triggerMarkdownSelect">选择 Markdown 文件</el-button>
+                <span class="import-count">已选择 {{ importFileList.length }} 个文件</span>
+                <el-button link type="danger" :disabled="importLoading || importFileList.length === 0" @click="clearImportFiles">
+                    清空文件
+                </el-button>
+            </div>
+
+            <el-form
+                ref="importFormRef"
+                :model="importForm"
+                :rules="importFormRules"
+                label-position="top"
+                class="import-form"
+            >
+                <div class="import-setting-grid">
+                    <div class="setting-block setting-cover-block">
+                        <div class="setting-title">统一封面</div>
+                        <el-form-item prop="cover" class="setting-form-item">
+                            <el-upload
+                                class="cover-uploader compact"
+                                action="#"
+                                :show-file-list="false"
+                                :http-request="uploadImportCover"
+                                :before-upload="beforeCoverUpload"
+                            >
+                                <img v-if="importForm.cover" :src="importForm.cover" class="cover-preview compact" />
+                                <div v-else class="cover-placeholder compact">
+                                    <el-icon class="cover-placeholder-icon"><Plus /></el-icon>
+                                </div>
+                            </el-upload>
+                        </el-form-item>
+                        <div class="cover-upload-text">{{ importForm.cover ? '更换封面' : '上传封面' }}</div>
+                    </div>
+
+                    <div class="setting-block">
+                        <el-form-item label="统一分类" prop="categoryId" class="setting-form-item">
+                            <el-select
+                                v-model="importForm.categoryId"
+                                placeholder="请选择文章分类"
+                                class="w-full"
+                                filterable
+                            >
+                                <el-option
+                                    v-for="item in categoryOptions"
+                                    :key="item.value"
+                                    :label="item.label"
+                                    :value="item.value"
+                                />
+                            </el-select>
+                        </el-form-item>
+                    </div>
+
+                    <div class="setting-block">
+                        <el-form-item label="统一标签" prop="tags" class="setting-form-item">
+                            <el-select
+                                v-model="importForm.tags"
+                                class="w-full"
+                                multiple
+                                filterable
+                                allow-create
+                                default-first-option
+                                collapse-tags
+                                collapse-tags-tooltip
+                                placeholder="请选择或直接输入标签"
+                            >
+                                <el-option
+                                    v-for="item in tagOptions"
+                                    :key="item.value"
+                                    :label="item.label"
+                                    :value="item.value"
+                                />
+                            </el-select>
+                        </el-form-item>
+                    </div>
+                </div>
+            </el-form>
+
+            <div class="import-list-wrap">
+                <div class="import-list-header">
+                    <span>待导入文件</span>
+                    <span v-if="importResultText" class="import-result-text">{{ importResultText }}</span>
+                </div>
+
+                <div v-if="importFileList.length === 0" class="import-empty">
+                    暂未选择 Markdown 文件
+                </div>
+
+                <div v-else class="import-file-list">
+                    <div v-for="item in importFileList" :key="item.uid" class="import-file-item">
+                        <div class="import-file-main">
+                            <div class="import-file-name">{{ item.fileName }}</div>
+                            <div class="import-file-title">标题：{{ item.title || '未解析到标题，将使用文件名' }}</div>
+                            <div class="import-file-summary">
+                                摘要：{{ item.summary || '未解析到摘要，将自动留空' }}
+                            </div>
+                        </div>
+
+                        <div class="import-file-side">
+                            <el-tag
+                                :type="item.status === 'success' ? 'success' : item.status === 'error' ? 'danger' : 'info'"
+                                effect="plain"
+                            >
+                                {{ item.status === 'success' ? '已导入' : item.status === 'error' ? '失败' : '待导入' }}
+                            </el-tag>
+                            <el-button
+                                link
+                                type="danger"
+                                :disabled="importLoading"
+                                @click="removeImportFile(item.uid)"
+                            >
+                                移除
+                            </el-button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </el-dialog>
     </div>
 </template>
 
 <script setup>
 import { computed, nextTick, reactive, ref } from 'vue'
-import { Search, RefreshRight } from '@element-plus/icons-vue'
+import { Search, RefreshRight, UploadFilled } from '@element-plus/icons-vue'
 import moment from 'moment'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
@@ -233,6 +396,7 @@ import { showMessage, showModel } from '@/composables/util'
 import { uploadFile } from '@/api/admin/blogsettings'
 import { getCategorySelectList } from '@/api/admin/category'
 import { getTagSelectList } from '@/api/admin/tag'
+import router from '@/router'
 import {
     deleteArticle,
     getArticleDetail,
@@ -249,7 +413,11 @@ const submitLoading = ref(false)
 const optionLoading = ref(false)
 const editorVisible = ref(false)
 const isEditMode = ref(false)
+const importVisible = ref(false)
+const importLoading = ref(false)
 const formRef = ref(null)
+const importFormRef = ref(null)
+const markdownInputRef = ref(null)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -257,6 +425,8 @@ const pageSize = ref(10)
 const articleList = ref([])
 const categoryOptions = ref([])
 const tagOptions = ref([])
+const importFileList = ref([])
+const importResultText = ref('')
 
 const editorForm = reactive({
     id: null,
@@ -270,6 +440,12 @@ const editorForm = reactive({
     createTime: '',
     updateTime: '',
     isDeleted: 0,
+})
+
+const importForm = reactive({
+    cover: '',
+    categoryId: null,
+    tags: [],
 })
 
 const formRules = {
@@ -305,6 +481,30 @@ const formRules = {
                 return
             }
             callback(new Error('请至少选择一个标签'))
+        },
+        trigger: 'change',
+    }],
+}
+
+const importFormRules = {
+    cover: [{ required: true, message: '请上传统一封面', trigger: 'change' }],
+    categoryId: [{
+        validator: (_, value, callback) => {
+            if (value) {
+                callback()
+                return
+            }
+            callback(new Error('请选择统一分类'))
+        },
+        trigger: 'change',
+    }],
+    tags: [{
+        validator: (_, value, callback) => {
+            if (Array.isArray(value) && value.length > 0) {
+                callback()
+                return
+            }
+            callback(new Error('请至少选择一个统一标签'))
         },
         trigger: 'change',
     }],
@@ -372,6 +572,10 @@ const pagedArticles = computed(() => {
     return filteredArticles.value.slice(start, end)
 })
 
+const getRowIndex = (index) => {
+    return (currentPage.value - 1) * pageSize.value + index + 1
+}
+
 const resetEditorForm = () => {
     editorForm.id = null
     editorForm.title = ''
@@ -384,6 +588,14 @@ const resetEditorForm = () => {
     editorForm.createTime = ''
     editorForm.updateTime = ''
     editorForm.isDeleted = 0
+}
+
+const resetImportForm = () => {
+    importForm.cover = ''
+    importForm.categoryId = null
+    importForm.tags = []
+    importFileList.value = []
+    importResultText.value = ''
 }
 
 const formatDateTime = (value) => {
@@ -467,11 +679,21 @@ const closeEditorDrawer = () => {
     editorVisible.value = false
 }
 
+const closeImportDialog = () => {
+    importVisible.value = false
+}
+
 const openPublishDrawer = () => {
     isEditMode.value = false
     resetEditorForm()
     editorVisible.value = true
     nextTick(() => formRef.value?.clearValidate())
+}
+
+const openImportDialog = () => {
+    resetImportForm()
+    importVisible.value = true
+    nextTick(() => importFormRef.value?.clearValidate())
 }
 
 const openEditDrawer = (row) => {
@@ -547,6 +769,241 @@ const uploadCover = (options) => {
         })
 }
 
+const uploadImportCover = (options) => {
+    const formData = new FormData()
+    formData.append('file', options.file)
+    uploadFile(formData)
+        .then((res) => {
+            if (res.code === 0) {
+                const url = getUploadedUrl(res)
+                if (url) {
+                    importForm.cover = url
+                    importFormRef.value?.validateField?.('cover')
+                }
+                options.onSuccess(res)
+            } else {
+                showMessage(res.message || '封面上传失败', 'error')
+                options.onError(new Error(res.message || '封面上传失败'))
+            }
+        })
+        .catch((err) => {
+            showMessage('封面上传失败', 'error')
+            options.onError(err)
+        })
+}
+
+const triggerMarkdownSelect = () => {
+    markdownInputRef.value?.click()
+}
+
+const normalizeMarkdownText = (content = '') => {
+    return String(content).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n')
+}
+
+const stripFrontMatter = (content) => {
+    if (!content.startsWith('---\n')) {
+        return content
+    }
+
+    const endIndex = content.indexOf('\n---\n', 4)
+    if (endIndex === -1) {
+        return content
+    }
+
+    return content.slice(endIndex + 5)
+}
+
+const removeMarkdownSyntax = (text = '') => {
+    return String(text)
+        .replace(/!\[[^\]]*]\([^)]*\)/g, '')
+        .replace(/\[([^\]]+)\]\(([^)]*)\)/g, '$1')
+        .replace(/[`>#*_~-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+const parseMarkdownFile = async (file) => {
+    const content = normalizeMarkdownText(await file.text())
+    const body = stripFrontMatter(content)
+    const lines = body.split('\n')
+
+    let title = ''
+    let titleIndex = -1
+    let inCodeBlock = false
+
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index]
+        const trimmed = line.trim()
+
+        if (trimmed.startsWith('```')) {
+            inCodeBlock = !inCodeBlock
+        }
+
+        if (inCodeBlock) {
+            continue
+        }
+
+        const headingMatch = trimmed.match(/^#\s+(.+)/)
+        if (headingMatch) {
+            title = removeMarkdownSyntax(headingMatch[1])
+            titleIndex = index
+            break
+        }
+    }
+
+    if (!title) {
+        title = file.name.replace(/\.md$/i, '')
+    }
+
+    const contentLines = [...lines]
+    if (titleIndex !== -1) {
+        contentLines.splice(titleIndex, 1)
+    }
+
+    const markdownBody = contentLines.join('\n').trim()
+
+    let summary = ''
+    inCodeBlock = false
+    for (const line of contentLines) {
+        const trimmed = line.trim()
+
+        if (trimmed.startsWith('```')) {
+            inCodeBlock = !inCodeBlock
+            continue
+        }
+
+        if (
+            inCodeBlock
+            || !trimmed
+            || trimmed.startsWith('#')
+            || trimmed.startsWith('>')
+            || /^[-*+]\s/.test(trimmed)
+            || /^\d+\.\s/.test(trimmed)
+            || trimmed.startsWith('![')
+        ) {
+            continue
+        }
+
+        summary = removeMarkdownSyntax(trimmed).slice(0, 160)
+        if (summary) {
+            break
+        }
+    }
+
+    return {
+        title: title.slice(0, 40),
+        summary,
+        content: markdownBody || body.trim(),
+    }
+}
+
+const handleMarkdownFilesChange = async (event) => {
+    const files = Array.from(event.target?.files || [])
+    if (files.length === 0) {
+        return
+    }
+
+    const parsedList = await Promise.all(
+        files.map(async (file, index) => {
+            try {
+                const parsed = await parseMarkdownFile(file)
+                return {
+                    uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                    fileName: file.name,
+                    raw: file,
+                    ...parsed,
+                    status: 'pending',
+                }
+            } catch (error) {
+                return {
+                    uid: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+                    fileName: file.name,
+                    raw: file,
+                    title: file.name.replace(/\.md$/i, ''),
+                    summary: '',
+                    content: '',
+                    status: 'error',
+                    errorMessage: '文件解析失败',
+                }
+            }
+        })
+    )
+
+    const uidSet = new Set(importFileList.value.map(item => item.uid))
+    const nextList = parsedList.filter(item => !uidSet.has(item.uid))
+    importFileList.value = [...importFileList.value, ...nextList]
+    importResultText.value = ''
+
+    event.target.value = ''
+}
+
+const clearImportFiles = () => {
+    importFileList.value = []
+    importResultText.value = ''
+}
+
+const removeImportFile = (uid) => {
+    importFileList.value = importFileList.value.filter(item => item.uid !== uid)
+}
+
+const submitImportArticles = async () => {
+    if (importFileList.value.length === 0) {
+        showMessage('请先选择 Markdown 文件', 'warning')
+        return
+    }
+
+    const hasInvalidFile = importFileList.value.some(item => !item.content)
+    if (hasInvalidFile) {
+        showMessage('存在解析失败的 Markdown 文件，请先移除后再导入', 'warning')
+        return
+    }
+
+    const valid = await importFormRef.value.validate().catch(() => false)
+    if (!valid) {
+        return
+    }
+
+    importLoading.value = true
+    let successCount = 0
+    let failCount = 0
+
+    for (const item of importFileList.value) {
+        try {
+            const res = await publishArticle({
+                title: item.title,
+                content: item.content,
+                cover: importForm.cover,
+                summary: item.summary,
+                categoryId: importForm.categoryId,
+                tags: importForm.tags,
+            })
+
+            if (res.code === 0) {
+                item.status = 'success'
+                successCount += 1
+            } else {
+                item.status = 'error'
+                item.errorMessage = res.message || '导入失败'
+                failCount += 1
+            }
+        } catch (error) {
+            item.status = 'error'
+            item.errorMessage = '导入失败'
+            failCount += 1
+        }
+
+        importResultText.value = `已完成 ${successCount + failCount} / ${importFileList.value.length}`
+    }
+
+    importLoading.value = false
+
+    if (successCount > 0) {
+        fetchArticleList()
+    }
+
+    showMessage(`导入完成，成功 ${successCount} 篇，失败 ${failCount} 篇`, failCount > 0 ? 'warning' : 'success')
+}
+
 const submitArticle = () => {
     formRef.value.validate((valid) => {
         if (!valid) {
@@ -613,6 +1070,18 @@ const deleteArticleSubmit = (e, row) => {
         })
 }
 
+const previewArticle = (row) => {
+    if (!row?.id) {
+        return
+    }
+
+    const previewUrl = router.resolve({
+        path: `/article/${row.id}`,
+    }).href
+
+    window.open(previewUrl, '_blank')
+}
+
 fetchOptions()
 fetchArticleList()
 </script>
@@ -669,10 +1138,15 @@ fetchArticleList()
 .table-toolbar {
     display: flex;
     align-items: center;
+    gap: 12px;
     margin-bottom: 14px;
 }
 
 .write-btn {
+    padding: 8px 14px;
+}
+
+.import-btn {
     padding: 8px 14px;
 }
 
@@ -840,6 +1314,120 @@ fetchArticleList()
     color: #909399;
 }
 
+.hidden-file-input {
+    display: none;
+}
+
+.import-tip {
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: #f4f8ff;
+    color: #4b6ba8;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.import-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.import-count {
+    font-size: 13px;
+    color: #909399;
+}
+
+.import-form {
+    margin-bottom: 18px;
+}
+
+.import-setting-grid {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.import-list-wrap {
+    border: 1px solid #ebeef5;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.import-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #ebeef5;
+    background: #fafafa;
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
+}
+
+.import-result-text {
+    font-size: 12px;
+    font-weight: 400;
+    color: #909399;
+}
+
+.import-empty {
+    padding: 28px 16px;
+    text-align: center;
+    color: #909399;
+    font-size: 13px;
+}
+
+.import-file-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.import-file-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 16px;
+    border-top: 1px solid #f2f3f5;
+}
+
+.import-file-item:first-child {
+    border-top: 0;
+}
+
+.import-file-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.import-file-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #303133;
+    word-break: break-all;
+}
+
+.import-file-title,
+.import-file-summary {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #909399;
+    word-break: break-all;
+}
+
+.import-file-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+}
+
 @media (max-width: 1200px) {
     .editor-setting-panel {
         grid-template-columns: 1fr 1fr;
@@ -847,6 +1435,10 @@ fetchArticleList()
 
     .setting-cover-block {
         grid-column: 1 / -1;
+    }
+
+    .import-setting-grid {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
@@ -866,6 +1458,16 @@ fetchArticleList()
     }
 
     .editor-setting-panel {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .import-toolbar {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .import-setting-grid {
         grid-template-columns: 1fr;
         gap: 14px;
     }
@@ -891,6 +1493,26 @@ fetchArticleList()
 }
 
 :deep(.article-editor-dialog .el-dialog__headerbtn) {
+    top: 18px;
+    right: 18px;
+}
+
+:deep(.article-import-dialog .el-dialog) {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+:deep(.article-import-dialog .el-dialog__header) {
+    margin-right: 0;
+    padding: 18px 24px 10px;
+    border-bottom: 1px solid #ebeef5;
+}
+
+:deep(.article-import-dialog .el-dialog__body) {
+    padding: 18px 24px 24px;
+}
+
+:deep(.article-import-dialog .el-dialog__headerbtn) {
     top: 18px;
     right: 18px;
 }

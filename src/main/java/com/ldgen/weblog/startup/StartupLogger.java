@@ -36,12 +36,12 @@ public class StartupLogger implements ApplicationListener<ApplicationReadyEvent>
             log.info("""
                             
                             🔥 项目已就绪！
-                             * <p>
+                             * --------------------------------
                              * 📌 环境信息
                              * • 应用：{}
                              * • 环境：{}
                              * • 耗时：{} s
-                             * <p>
+                             * --------------------------------
                              * 🌐 访问入口
                              * • Local    → {}://localhost:{}
                              * • External → {}://{}:{}
@@ -66,12 +66,12 @@ public class StartupLogger implements ApplicationListener<ApplicationReadyEvent>
 
 /**
  * 🔥 项目已就绪！
- * <p>
+ * ----------------------------------------------------------
  * 📌 环境信息
  * • 应用：{}
  * • 环境：{}
  * • 耗时：{} s
- * <p>
+ * ----------------------------------------------------------
  * 🌐 访问入口
  * • Local    → {}://localhost:{}
  * • External → {}://{}:{}

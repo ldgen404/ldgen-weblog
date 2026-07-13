@@ -5,6 +5,25 @@
         <main class="mx-auto max-w-[1280px] px-3 py-4 lg:px-4 lg:py-5">
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_252px] xl:grid-cols-[minmax(0,1fr)_300px]">
                 <section>
+                    <div
+                        v-if="activeTag"
+                        class="mb-4 flex items-center justify-between rounded-2xl border border-[#d6f2ea] bg-white px-4 py-3"
+                    >
+                        <div class="text-sm text-slate-500">
+                            当前按标签筛选:
+                            <span class="ml-1 rounded-full bg-[#ddf7ef] px-3 py-1 font-medium text-[#285f55]">
+                                #{{ activeTag.name }}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            class="text-sm font-medium text-slate-500 transition hover:text-slate-700"
+                            @click="clearActiveTag"
+                        >
+                            清除筛选
+                        </button>
+                    </div>
+
                     <div v-loading="articleLoading" class="grid gap-4 md:grid-cols-2">
                         <ArticleListCard
                             v-for="(article, index) in filteredArticleList"
@@ -18,11 +37,12 @@
                             class="col-span-full rounded-2xl border border-dashed border-slate-200 bg-white px-8 py-20 text-center text-slate-400"
                         >
                             <template v-if="keyword">没有找到和“{{ keyword }}”相关的文章</template>
+                            <template v-else-if="activeTag">没有找到和“#{{ activeTag.name }}”相关的文章</template>
                             <template v-else>暂时还没有文章内容</template>
                         </div>
                     </div>
 
-                    <div class="mt-6 flex justify-center" v-if="!keyword && total > pageSize">
+                    <div class="mt-6 flex justify-center" v-if="!keyword && !activeTag && total > pageSize">
                         <el-pagination
                             v-model:current-page="currentPage"
                             v-model:page-size="pageSize"
@@ -43,30 +63,12 @@
                             :visit-total="visitTotal"
                         />
 
-                        <SidebarCard>
-                            <button
-                                type="button"
-                                class="flex w-full items-center justify-between rounded-xl bg-[#f8fbff] px-4 py-4 text-left transition hover:bg-[#eef6ff]"
-                                @click="showChatroom"
-                            >
-                                <div class="flex items-center gap-3">
-                                    <div class="flex h-10 w-10 items-center justify-center rounded-full bg-[#dff1ff] text-[#5aa7d8]">
-                                        <el-icon :size="18"><ChatDotRound /></el-icon>
-                                    </div>
-                                    <div>
-                                        <div class="text-[15px] font-semibold text-slate-800">公共聊天室</div>
-                                        <div class="mt-1 text-sm text-slate-400">一起来聊天吧</div>
-                                    </div>
-                                </div>
-                                <span class="text-slate-300">›</span>
-                            </button>
-                        </SidebarCard>
-
+                       
                         <CategoryTagCard
                             title="分类"
                             :items="categoryCards"
                             empty-text="暂无分类"
-                            @select="showPending"
+                            @select="goCategoryPage"
                         />
 
                         <CategoryTagCard
@@ -75,7 +77,8 @@
                             type="tag"
                             prefix="#"
                             empty-text="暂无标签"
-                            @select="showPending"
+                            :active-id="activeTagId"
+                            @select="selectTag"
                         />
                     </div>
                 </aside>
@@ -88,7 +91,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Header from '@/components/frontend/Header.vue'
 import Footer from '@/components/frontend/Footer.vue'
 import SidebarCard from '@/components/frontend/SidebarCard.vue'
@@ -100,6 +103,7 @@ import { showMessage } from '@/composables/util'
 import { useBlogStore } from '@/stores/blog'
 
 const route = useRoute()
+const router = useRouter()
 const blogStore = useBlogStore()
 
 const articleLoading = ref(false)
@@ -107,16 +111,16 @@ const articleList = ref([])
 const currentPage = ref(1)
 const pageSize = ref(6)
 const total = ref(0)
+const activeTagId = ref(null)
 
 const categoryList = computed(() => blogStore.categoryList)
 const tagList = computed(() => blogStore.tagList)
 const keyword = computed(() => (route.query.keyword || '').trim())
+const activeTag = computed(() => {
+    return tagCards.value.find(item => String(item.id) === String(activeTagId.value)) || null
+})
 
 const filteredArticleList = computed(() => {
-    if (!keyword.value) {
-        return articleList.value
-    }
-
     return articleList.value.filter((article) => {
         const searchText = [
             article.title,
@@ -125,7 +129,10 @@ const filteredArticleList = computed(() => {
             ...(article.tags || []).map(tag => tag.name),
         ].filter(Boolean).join(' ').toLowerCase()
 
-        return searchText.includes(keyword.value.toLowerCase())
+        const matchesKeyword = !keyword.value || searchText.includes(keyword.value.toLowerCase())
+        const matchesTag = !activeTagId.value || (article.tags || []).some(tag => String(tag.id) === String(activeTagId.value))
+
+        return matchesKeyword && matchesTag
     })
 })
 
@@ -186,8 +193,32 @@ const loadArticlePage = async () => {
     }
 }
 
-const showPending = (item) => {
-    showMessage(`${item.name}页面开发中`, 'info')
+const goCategoryPage = (item) => {
+    if (!item?.id) {
+        return
+    }
+
+    router.push({
+        path: '/category',
+        query: { id: String(item.id) },
+    })
+}
+
+const selectTag = (item) => {
+    if (!item?.id) {
+        return
+    }
+
+    if (String(activeTagId.value) === String(item.id)) {
+        activeTagId.value = null
+        return
+    }
+
+    activeTagId.value = item.id
+}
+
+const clearActiveTag = () => {
+    activeTagId.value = null
 }
 
 const showChatroom = () => {

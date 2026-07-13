@@ -10,4 +10,12 @@ import com.ldgen.weblog.model.entity.Article;
  */
 public interface ArticleMapper extends BaseMapper<Article> {
 
+    /**
+     * 阅读量 +1
+     *
+     * @param articleId 文章 ID
+     * @return 受影响行数
+     */
+    int increaseReadNum(Long articleId);
+
 }

@@ -2,6 +2,7 @@ package com.ldgen.weblog.service.impl;
 
 import com.ldgen.weblog.common.BaseResponse;
 import com.ldgen.weblog.common.ResultUtils;
+import com.ldgen.weblog.event.ReadArticleEvent;
 import com.ldgen.weblog.exception.BusinessException;
 import com.ldgen.weblog.exception.ErrorCode;
 import com.ldgen.weblog.exception.ThrowUtils;
@@ -10,7 +11,9 @@ import com.ldgen.weblog.mapper.ArticleContentMapper;
 import com.ldgen.weblog.mapper.ArticleTagRelMapper;
 import com.ldgen.weblog.mapper.TagMapper;
 import com.ldgen.weblog.mapper.TCategoryMapper;
+import com.ldgen.weblog.model.dto.article.FindCategoryArticlePageListReqVO;
 import com.ldgen.weblog.model.dto.article.FindIndexArticlePageListReqVO;
+import com.ldgen.weblog.model.dto.article.FindTagArticlePageListReqVO;
 import com.ldgen.weblog.model.dto.article.PublishArticleRequest;
 import com.ldgen.weblog.model.dto.article.UpdateArticleRequest;
 import com.ldgen.weblog.model.entity.ArticleTagRel;
@@ -19,6 +22,8 @@ import com.ldgen.weblog.model.entity.ArticleContent;
 import com.ldgen.weblog.model.entity.Tag;
 import com.ldgen.weblog.model.entity.TCategory;
 import com.ldgen.weblog.model.vo.article.FindArticleDetailRspVO;
+import com.ldgen.weblog.model.vo.article.FindAdjacentArticleRspVO;
+import com.ldgen.weblog.model.vo.article.FindFrontendArticleDetailRspVO;
 import com.ldgen.weblog.model.vo.article.FindIndexArticlePageListRspVO;
 import com.ldgen.weblog.model.vo.category.FindCategoryListRspVO;
 import com.ldgen.weblog.model.vo.tag.FindTagListRspVO;
@@ -30,10 +35,12 @@ import com.ldgen.weblog.mapper.ArticleMapper;
 import com.ldgen.weblog.service.ArticleService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
+import com.ldgen.weblog.utils.MarkdownUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -68,6 +75,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private TagMapper tagMapper;
     @Resource
     private ArticleTagRelMapper articleTagRelMapper;
+    @Resource
+    private ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * 发布文章
@@ -122,6 +131,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return ResultUtils.success("发布成功");
     }
 
+    /**
+     * 更新文章
+     * @param updateArticleRequest
+     * @return
+     */
     @Transactional(rollbackFor = Exception.class)
     @Override
     public BaseResponse updateArticle(UpdateArticleRequest updateArticleRequest) {
@@ -150,6 +164,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return ResultUtils.success(true);
     }
 
+    /**
+     * 根据文章ID查询文章详情
+     * @param articleId
+     * @return
+     */
     @Override
     public BaseResponse findArticleDetail(Long articleId) {
         ThrowUtils.throwIf(articleId == null || articleId <= 0, ErrorCode.PARAMS_ERROR, "文章 ID 不合法");
@@ -200,12 +219,105 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .readNum(article.getReadNum())
                 .createTime(article.getCreateTime())
                 .updateTime(article.getUpdateTime())
-                .isDeleted(article.getIsDeleted())
                 .build();
 
         return ResultUtils.success(rspVO);
     }
 
+    /**
+     * 获取前台文章详情
+     *
+     * @param articleId 文章 ID
+     * @return 前台文章详情
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResponse findFrontendArticleDetail(Long articleId) {
+        ThrowUtils.throwIf(articleId == null || articleId <= 0, ErrorCode.PARAMS_ERROR, "文章 ID 不合法");
+
+        Article article = articleMapper.selectOneById(articleId);
+        ThrowUtils.throwIf(Objects.isNull(article) || !Objects.equals(article.getIsDeleted(), 0), ErrorCode.NOT_FOUND_ERROR, "文章不存在");
+
+        ArticleContent articleContent = articleContentMapper.selectOneByQuery(
+                QueryWrapper.create().eq("article_id", articleId)
+        );
+
+        long nextReadNum = Objects.requireNonNullElse(article.getReadNum(), 0L) + 1;
+        applicationEventPublisher.publishEvent(new ReadArticleEvent(this, articleId));
+
+        String markdownContent = Objects.nonNull(articleContent) ? articleContent.getContent() : "";
+        String contentHtml = MarkdownUtils.markdownToHtml(markdownContent);
+        String plainText = MarkdownUtils.markdownToPlainText(markdownContent);
+        int wordCount = plainText.replaceAll("\\s+", "").length();
+        int readingTime = Math.max(1, (int) Math.ceil(wordCount / 300.0D));
+
+        Map<Long, FindCategoryListRspVO> categoryMap = buildArticleCategoryMap(List.of(articleId));
+        Map<Long, List<FindTagListRspVO>> tagMap = buildArticleTagMap(List.of(articleId));
+        FindAdjacentArticleRspVO preArticle = findPreviousArticle(article);
+        FindAdjacentArticleRspVO nextArticle = findNextArticle(article);
+
+        FindFrontendArticleDetailRspVO rspVO = FindFrontendArticleDetailRspVO.builder()
+                .id(article.getId())
+                .title(article.getTitle())
+                .cover(article.getCover())
+                .summary(article.getSummary())
+                .content(markdownContent)
+                .contentHtml(contentHtml)
+                .category(categoryMap.get(articleId))
+                .tags(tagMap.getOrDefault(articleId, Collections.emptyList()))
+                .readNum(nextReadNum)
+                .wordCount(wordCount)
+                .readingTime(readingTime)
+                .preArticle(preArticle)
+                .nextArticle(nextArticle)
+                .createTime(article.getCreateTime())
+                .updateTime(article.getUpdateTime())
+                .build();
+
+        return ResultUtils.success(rspVO);
+    }
+
+    private FindAdjacentArticleRspVO findPreviousArticle(Article currentArticle) {
+        Page<Article> page = this.page(
+                Page.of(1, 1),
+                QueryWrapper.create()
+                        .eq("is_deleted", 0)
+                        .lt("id", currentArticle.getId())
+                        .orderBy("id", false)
+        );
+
+        List<Article> records = page.getRecords();
+        if (CollectionUtils.isEmpty(records)) {
+            return null;
+        }
+
+        Article article = records.get(0);
+        return FindAdjacentArticleRspVO.builder()
+                .id(article.getId())
+                .title(article.getTitle())
+                .build();
+    }
+
+    private FindAdjacentArticleRspVO findNextArticle(Article currentArticle) {
+        Page<Article> page = this.page(
+                Page.of(1, 1),
+                QueryWrapper.create()
+                        .eq("is_deleted", 0)
+                        .gt("id", currentArticle.getId())
+                        .orderBy("id", true)
+        );
+
+        List<Article> records = page.getRecords();
+        if (CollectionUtils.isEmpty(records)) {
+            return null;
+        }
+
+        Article article = records.get(0);
+        return FindAdjacentArticleRspVO.builder()
+                .id(article.getId())
+                .title(article.getTitle())
+                .build();
+    }
 
     /**
      * 保存标签
@@ -260,6 +372,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
     }
 
+    /**
+     * 保存或更新文章内容
+     * @param articleId
+     * @param content
+     */
     private void saveOrUpdateArticleContent(Long articleId, String content) {
         ArticleContent articleContent = articleContentMapper.selectOneByQuery(
                 QueryWrapper.create().eq("article_id", articleId)
@@ -277,6 +394,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .build());
     }
 
+    /**
+     * 保存或更新文章分类
+     * @param articleId
+     * @param categoryId
+     */
     private void saveOrUpdateArticleCategory(Long articleId, Long categoryId) {
         TCategory tCategory = categoryMapper.selectOneById(categoryId);
         ThrowUtils.throwIf(Objects.isNull(tCategory), ErrorCode.PARAMS_ERROR, "分类不存在");
@@ -314,7 +436,100 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .orderBy("create_time", false);
 
         Page<Article> articlePage = this.page(Page.of(pageNum, pageSize), queryWrapper);
+        return buildArticlePageResponse(articlePage, pageNum, pageSize);
+    }
 
+    /**
+     * 获取分类页文章分页数据
+     *
+     * @param findCategoryArticlePageListReqVO 请求参数
+     * @return 分类页文章分页数据
+     */
+    @Override
+    public BaseResponse findCategoryArticlePageList(FindCategoryArticlePageListReqVO findCategoryArticlePageListReqVO) {
+        ThrowUtils.throwIf(findCategoryArticlePageListReqVO == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
+
+        Long categoryId = findCategoryArticlePageListReqVO.getCategoryId();
+        ThrowUtils.throwIf(Objects.isNull(categoryId), ErrorCode.PARAMS_ERROR, "分类 ID 不能为空");
+
+        long pageNum = findCategoryArticlePageListReqVO.getPageNum();
+        long pageSize = findCategoryArticlePageListReqVO.getPageSize();
+        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 篇文章");
+
+        TCategory category = categoryMapper.selectOneById(categoryId);
+        ThrowUtils.throwIf(Objects.isNull(category) || !Objects.equals(category.getIsDeleted(), 0), ErrorCode.PARAMS_ERROR, "分类不存在");
+
+        List<ArticleCategoryRel> articleCategoryRelList = articleCategoryRelMapper.selectListByQuery(
+                QueryWrapper.create().eq("category_id", categoryId)
+        );
+        if (CollectionUtils.isEmpty(articleCategoryRelList)) {
+            return ResultUtils.success(new Page<>(pageNum, pageSize, 0));
+        }
+
+        List<Long> articleIds = articleCategoryRelList.stream()
+                .map(ArticleCategoryRel::getArticleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (CollectionUtils.isEmpty(articleIds)) {
+            return ResultUtils.success(new Page<>(pageNum, pageSize, 0));
+        }
+
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .in("id", articleIds)
+                .eq("is_deleted", 0)
+                .orderBy("create_time", false);
+
+        Page<Article> articlePage = this.page(Page.of(pageNum, pageSize), queryWrapper);
+        return buildArticlePageResponse(articlePage, pageNum, pageSize);
+    }
+
+    /**
+     * 获取标签页文章分页数据
+     *
+     * @param findTagArticlePageListReqVO 请求参数
+     * @return 标签页文章分页数据
+     */
+    @Override
+    public BaseResponse findTagArticlePageList(FindTagArticlePageListReqVO findTagArticlePageListReqVO) {
+        ThrowUtils.throwIf(findTagArticlePageListReqVO == null, ErrorCode.PARAMS_ERROR, "请求参数不能为空");
+
+        Long tagId = findTagArticlePageListReqVO.getTagId();
+        ThrowUtils.throwIf(Objects.isNull(tagId), ErrorCode.PARAMS_ERROR, "标签 ID 不能为空");
+
+        long pageNum = findTagArticlePageListReqVO.getPageNum();
+        long pageSize = findTagArticlePageListReqVO.getPageSize();
+        ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 篇文章");
+
+        Tag tag = tagMapper.selectOneById(tagId);
+        ThrowUtils.throwIf(Objects.isNull(tag) || !Objects.equals(tag.getIsDeleted(), 0), ErrorCode.PARAMS_ERROR, "标签不存在");
+
+        List<ArticleTagRel> articleTagRelList = articleTagRelMapper.selectListByQuery(
+                QueryWrapper.create().eq("tag_id", tagId)
+        );
+        if (CollectionUtils.isEmpty(articleTagRelList)) {
+            return ResultUtils.success(new Page<>(pageNum, pageSize, 0));
+        }
+
+        List<Long> articleIds = articleTagRelList.stream()
+                .map(ArticleTagRel::getArticleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (CollectionUtils.isEmpty(articleIds)) {
+            return ResultUtils.success(new Page<>(pageNum, pageSize, 0));
+        }
+
+        QueryWrapper queryWrapper = QueryWrapper.create()
+                .in("id", articleIds)
+                .eq("is_deleted", 0)
+                .orderBy("create_time", false);
+
+        Page<Article> articlePage = this.page(Page.of(pageNum, pageSize), queryWrapper);
+        return buildArticlePageResponse(articlePage, pageNum, pageSize);
+    }
+
+    private BaseResponse buildArticlePageResponse(Page<Article> articlePage, long pageNum, long pageSize) {
         Page<FindIndexArticlePageListRspVO> rspPage = new Page<>(pageNum, pageSize, articlePage.getTotalRow());
         List<Article> articleList = articlePage.getRecords();
         if (CollectionUtils.isEmpty(articleList)) {
@@ -338,6 +553,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return ResultUtils.success(rspPage);
     }
 
+    /**
+     *
+     * @param article
+     * @param articleCategoryMap
+     * @param articleTagMap
+     * @return
+     */
     private FindIndexArticlePageListRspVO convertToIndexPageRsp(
             Article article,
             Map<Long, FindCategoryListRspVO> articleCategoryMap,
@@ -403,6 +625,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 ));
     }
 
+    /**
+     * 根据文章ID查询文章标签
+     * @param articleIds
+     * @return
+     */
     private Map<Long, List<FindTagListRspVO>> buildArticleTagMap(List<Long> articleIds) {
         if (CollectionUtils.isEmpty(articleIds)) {
             return Collections.emptyMap();

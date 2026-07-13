@@ -5,20 +5,23 @@ const cookie = useCookies()
 // ============================== Token 令牌 ==============================
 
 // 存储在 Cookie 中的 Token 的 key
-const TOKEN_KEY = 'Authorization'
+const TOKEN_KEY = 'satoken'
+const LEGACY_TOKEN_KEY = 'Authorization'
 
 // 获取 Token 值
 export function getToken() {
-    return cookie.get(TOKEN_KEY)
+    return cookie.get(TOKEN_KEY) || cookie.get(LEGACY_TOKEN_KEY)
 }
 
 // 设置 Token 到 Cookie 中
 export function setToken(token) {
+    cookie.remove(LEGACY_TOKEN_KEY)
     return cookie.set(TOKEN_KEY, token)
 }
 
 // 删除 Token
 export function removeToken() {
+    cookie.remove(LEGACY_TOKEN_KEY)
     return cookie.remove(TOKEN_KEY)
 }
 

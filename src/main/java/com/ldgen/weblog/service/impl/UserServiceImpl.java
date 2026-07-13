@@ -1,5 +1,6 @@
 package com.ldgen.weblog.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
@@ -121,21 +122,31 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         // 4. 如果用户存在，记录用户的登录态
         request.getSession().setAttribute(USER_LOGIN_STATE, user);
+        StpUtil.login(user.getId());
         // 5. 返回脱敏的用户信息
         return this.getLoginUserVO(user);
     }
 
     @Override
     public User getLoginUser(HttpServletRequest request) {
-        // 先判断用户是否登录
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        User currentUser = (User) userObj;
-        if (currentUser == null || currentUser.getId() == null) {
+        Long userId = null;
+
+        if (StpUtil.isLogin()) {
+            userId = StpUtil.getLoginIdAsLong();
+        } else {
+            Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+            User currentUser = (User) userObj;
+            if (currentUser != null) {
+                userId = currentUser.getId();
+            }
+        }
+
+        if (userId == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
+
         // 从数据库查询当前用户信息
-        long userId = currentUser.getId();
-        currentUser = this.getById(userId);
+        User currentUser = this.getById(userId);
         if (currentUser == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
         }
@@ -164,13 +175,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public boolean userLogout(HttpServletRequest request) {
-        // 先判断用户是否登录
-        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
-        if (userObj == null) {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "用户未登录");
-        }
-        // 移除登录态
         request.getSession().removeAttribute(USER_LOGIN_STATE);
+        if (StpUtil.isLogin()) {
+            StpUtil.logout();
+            return true;
+        }
         return true;
     }
 

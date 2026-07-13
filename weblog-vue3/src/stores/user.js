@@ -12,14 +12,24 @@ export const useUserStore = defineStore('user', () => {
     userInfo.value = data || {}
   }
 
+  function clearUserInfo() {
+    userInfo.value = {}
+  }
+
   // 设置用户信息
-  function setUserInfo() {
-    // 调用后头获取用户信息接口
-    getUserInfo().then(res => {
+  async function setUserInfo() {
+    try {
+      const res = await getUserInfo()
       if (res.code === 0 || res.success === true) {
         userInfo.value = res.data || {}
+        return userInfo.value
       }
-    })
+    } catch (error) {
+      // 交给调用方决定是否跳转登录
+    }
+
+    clearUserInfo()
+    return null
   }
 
   // 退出登录
@@ -27,10 +37,10 @@ export const useUserStore = defineStore('user', () => {
     // 删除 cookie 中的 token 令牌
     removeToken()
     // 删除登录用户信息
-    userInfo.value = {}
+    clearUserInfo()
   }
 
-  return { userInfo, setUserInfo, setUserInfoData, logout }
+  return { userInfo, setUserInfo, setUserInfoData, clearUserInfo, logout }
 }, 
 {
   // 开启持久化
