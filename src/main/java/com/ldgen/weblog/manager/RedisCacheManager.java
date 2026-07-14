@@ -2,11 +2,13 @@ package com.ldgen.weblog.manager;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.Set;
 import java.util.function.Supplier;
 
 @Component
@@ -51,11 +53,15 @@ public class RedisCacheManager {
 
     public void deleteByPrefix(String prefix) {
         try {
-            Set<String> keys = redisTemplate.keys(prefix + "*");
-            if (keys == null || keys.isEmpty()) {
-                return;
-            }
-            redisTemplate.delete(keys);
+            redisTemplate.execute((RedisCallback<Void>) connection -> {
+                Cursor<byte[]> cursor = connection.scan(
+                        ScanOptions.scanOptions().match(prefix + "*").count(100).build()
+                );
+                while (cursor.hasNext()) {
+                    connection.del(cursor.next());
+                }
+                return null;
+            });
         } catch (Exception e) {
             log.warn("Redis 按前缀删除缓存失败, prefix: {}", prefix, e);
         }

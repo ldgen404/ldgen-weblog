@@ -583,7 +583,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         redisCacheManager.deleteByPrefix(RedisCacheKeyConstants.ARCHIVE_PAGE_PREFIX);
         redisCacheManager.deleteKeys(
                 RedisCacheKeyConstants.DASHBOARD_STATISTICS,
-                RedisCacheKeyConstants.DASHBOARD_PUBLISH_HOTSPOT
+                RedisCacheKeyConstants.DASHBOARD_PUBLISH_HOTSPOT,
+                RedisCacheKeyConstants.TAG_SELECT,
+                RedisCacheKeyConstants.TAG_LIST
         );
     }
 
